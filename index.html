@@ -1,0 +1,2626 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Habit-Tracker</title>
+  <style>
+    :root{
+      --text:#e7ecff;
+      --muted:#aab3d6;
+      --accent:#7aa2ff;
+      --good:#39d98a;
+      --warn:#ffcc66;
+      --bad:#ff6b6b;
+      --shadow: 0 12px 30px rgba(0,0,0,.35);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#070a14 0%, #0b1020 60%, #070a14 100%);
+      color:var(--text);
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+
+    input[type="number"]{ -moz-appearance: textfield; appearance: textfield; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+
+    header{
+      padding:18px 18px 0 18px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header .topbar{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:12px;
+      padding: 14px 16px;
+      background: rgba(18,26,51,.55);
+      border:1px solid rgba(35,48,90,.6);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      flex-wrap:wrap;
+    }
+    h1{ margin:0; font-size:18px; letter-spacing:.2px; }
+    .subtitle{ margin-top:6px; color:var(--muted); font-size:12px; }
+    .dateRow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+
+    .pill{
+      padding:8px 10px; border-radius: 999px;
+      border:1px solid rgba(35,48,90,.7);
+      background: rgba(15,23,48,.6);
+      color:var(--text);
+      display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+    }
+    .pill strong{font-weight:700}
+    .pill.warn{ border-color: rgba(255,204,102,.6); background: rgba(255,204,102,.12); }
+    .pill.bad{ border-color: rgba(255,107,107,.6); background: rgba(255,107,107,.12); }
+    .pill.info{ border-color: rgba(122,162,255,.55); background: rgba(122,162,255,.12); }
+
+    .btn{
+      appearance:none;
+      border:1px solid rgba(35,48,90,.9);
+      background: rgba(18,26,51,.75);
+      color:var(--text);
+      border-radius: 10px;
+      padding:9px 10px;
+      cursor:pointer;
+      transition: transform .06s ease, background .2s ease, border-color .2s ease;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .btn:hover{ background: rgba(26,38,76,.8); border-color: rgba(122,162,255,.65); }
+    .btn:active{ transform: scale(.99); }
+    .btn.ghost{ background: transparent; }
+
+    .charts{
+      max-width:1200px;
+      margin: 16px auto 16px auto;
+      padding: 0 18px;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:16px;
+    }
+    @media (max-width: 900px){
+      .charts{ grid-template-columns: 1fr; }
+    }
+    canvas{ width:100% !important; height:280px !important; }
+    .clickHint{ margin-top:8px; font-size:12px; color:var(--muted); }
+    .tiny{ font-size:11px; color:var(--muted); }
+
+    main{
+      max-width: 1200px;
+      margin: 0 auto 16px auto;
+      padding: 0 18px;
+      display:grid;
+      grid-template-columns: 60% 40%;
+      gap:16px;
+    }
+    @media (max-width: 900px){
+      main{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background: rgba(18,26,51,.6);
+      border:1px solid rgba(35,48,90,.6);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow:hidden;
+    }
+    .cardHeader{
+      padding:14px 14px 10px 14px;
+      border-bottom: 1px solid rgba(35,48,90,.55);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .cardHeader h2{ margin:0; font-size:14px; letter-spacing:.2px; }
+    .cardBody{ padding: 12px 14px 14px 14px; }
+
+    .habitList{ display:flex; flex-direction:column; gap:10px; }
+    .habitRow{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:10px 10px;
+      background: rgba(15,23,48,.55);
+      border:1px solid rgba(35,48,90,.55);
+      border-radius: 12px;
+    }
+    .habitLeft{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+    .habitName{ font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .habitMeta{ display:flex; gap:10px; color:var(--muted); font-size:12px; flex-wrap:wrap; }
+    .metaBadge{
+      border:1px solid rgba(35,48,90,.55);
+      background: rgba(18,26,51,.55);
+      border-radius:999px;
+      padding:2px 8px;
+    }
+    .habitRight{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+    .check{ display:flex; align-items:center; gap:8px; user-select:none; cursor:pointer; }
+    .check input{ width:18px; height:18px; }
+    .check input[type="checkbox"]{ accent-color: var(--good); }
+
+    .numericInput{
+      width:120px;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid rgba(35,48,90,.7);
+      background: rgba(10,14,30,.55);
+      color:var(--text);
+      outline:none;
+    }
+    .numericInput:focus{ border-color: rgba(122,162,255,.7); }
+
+    .note{ color:var(--muted); font-size:12px; margin-top:8px; }
+
+    .progressWrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:18px 14px; }
+    .circleBox{
+      width:min(300px, 80vw);
+      aspect-ratio: 1/1;
+      display:grid;
+      place-items:center;
+      position:relative;
+    }
+    .circleBox svg{ width:100%; height:100%; }
+    .circleCenter{
+      position:absolute;
+      text-align:center;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      align-items:center;
+    }
+    .bigPct{ font-size:38px; font-weight:800; letter-spacing:-.5px; }
+    .smallLbl{ color:var(--muted); font-size:12px; }
+    .circleStats{
+      width:100%;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      padding:0 8px;
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .editorSection{
+      max-width:1200px;
+      margin: 0 auto 28px auto;
+      padding: 0 18px;
+    }
+    details{
+      border:1px solid rgba(35,48,90,.7);
+      border-radius: 14px;
+      background: rgba(18,26,51,.55);
+      overflow:hidden;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    summary{
+      list-style:none;
+      cursor:pointer;
+      padding: 12px 14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      user-select:none;
+    }
+    summary::-webkit-details-marker{ display:none; }
+    .sumLeft{ display:flex; flex-direction:column; gap:4px; }
+    .sumTitle{ font-weight:700; }
+    .sumSub{ color:var(--muted); font-size:12px; }
+    .sumRight{ display:flex; align-items:center; gap:10px; color:var(--muted); font-size:12px; }
+
+    .editorBody{
+      border-top:1px solid rgba(35,48,90,.55);
+      padding: 12px 14px 14px 14px;
+      display:grid;
+      grid-template-columns: 0.85fr 1.15fr;
+      gap:14px;
+    }
+    @media (max-width: 900px){
+      .editorBody{ grid-template-columns: 1fr; }
+    }
+    .panel{
+      padding:12px;
+      background: rgba(15,23,48,.55);
+      border:1px solid rgba(35,48,90,.55);
+      border-radius: 12px;
+    }
+    .panel h3{ margin:0 0 10px 0; font-size:13px; }
+    .row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin:8px 0;
+      flex-wrap:wrap;
+    }
+    .row label{ color:var(--muted); font-size:12px; min-width:130px; }
+
+    .field{
+      flex:1;
+      min-width:180px;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid rgba(35,48,90,.7);
+      background: rgba(10,14,30,.55);
+      color:var(--text);
+      outline:none;
+    }
+    .field:focus{ border-color: rgba(122,162,255,.7); }
+
+    .inlineToggle{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:var(--muted);
+      font-size:12px;
+      user-select:none;
+    }
+    .inlineToggle input{ width:16px; height:16px; }
+
+    .weightsGrid{
+      display:grid;
+      grid-template-columns: 2.4fr 110px 170px 90px 34px;
+      gap:12px;
+      align-items:center;
+    }
+    .weightsHead{
+      margin-bottom:6px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .weightsHead > div{ white-space:nowrap; }
+
+    .weightsRow{
+      padding:6px 0;
+      border-bottom: 1px dashed rgba(35,48,90,.5);
+    }
+    .weightsRow:last-child{ border-bottom:none; }
+    .wName{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:650; }
+
+    .numSmall{
+      width:100%;
+      min-width:0;
+      padding:7px 8px;
+      border-radius:10px;
+      border:1px solid rgba(35,48,90,.7);
+      background: rgba(10,14,30,.55);
+      color:var(--text);
+      outline:none;
+      text-align:right;
+    }
+    .numSmall:focus{ border-color: rgba(122,162,255,.7); }
+
+    .goalCell{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+
+    .opBtn{
+      width:56px;
+      height:34px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:10px;
+      border:1px solid rgba(35,48,90,.9);
+      background: rgba(18,26,51,.75);
+      color:var(--text);
+      cursor:pointer;
+      user-select:none;
+      flex:0 0 auto;
+      font-size:12px;
+    }
+    .opBtn:hover{ background: rgba(26,38,76,.8); border-color: rgba(122,162,255,.65); }
+    .opBtn:active{ transform: scale(.99); }
+    .opBtn[disabled]{ opacity:.55; cursor:default; }
+
+    .iconX{
+      width:34px;
+      height:34px;
+      padding:0;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:10px;
+      border:1px solid rgba(255,107,107,.55);
+      background: rgba(255,107,107,.08);
+      color:var(--text);
+      cursor:pointer;
+      user-select:none;
+      line-height:1;
+      font-size:16px;
+    }
+    .iconX:hover{ background: rgba(255,107,107,.14); }
+    .iconX:active{ transform: scale(.99); }
+    .iconX[disabled]{ opacity:.55; cursor:default; }
+
+    @media (max-width: 700px){
+      .weightsGrid{ grid-template-columns: 1.8fr 100px 160px 90px 34px; }
+    }
+
+    .help{ font-size:12px; color:var(--muted); margin-top:8px; }
+    .totals{
+      margin-top:10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      color:var(--muted);
+      font-size:12px;
+      padding-top:10px;
+      border-top:1px dashed rgba(35,48,90,.7);
+      flex-wrap:wrap;
+    }
+    .kpi{ color:var(--text); font-weight:750; }
+    .warnText{ color: var(--warn); }
+    .badText{ color: var(--bad); }
+    .goodText{ color:var(--good); }
+    .lockBadge{
+      border-color: rgba(255,204,102,.6);
+      background: rgba(255,204,102,.12);
+      color: var(--warn);
+    }
+
+    .hidden{ display:none !important; }
+
+    /* Compare dropdown in chart header */
+    .compareWrap{
+      position:relative;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .comparePanel{
+      position:absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: min(420px, 84vw);
+      padding: 12px;
+      border-radius: 14px;
+      border:1px solid rgba(35,48,90,.75);
+      background: rgba(10,14,30,.92);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      z-index: 50;
+    }
+    .comparePanelTitle{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .compareList{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      max-height: 240px;
+      overflow:auto;
+      padding-right: 6px;
+    }
+    .compareItem{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:8px 10px;
+      border-radius: 12px;
+      border:1px solid rgba(35,48,90,.55);
+      background: rgba(18,26,51,.55);
+    }
+    .compareItemLeft{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .compareItemName{
+      font-weight:800;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .overlay{
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,.55);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:9999;
+    }
+    .authCard{
+      width:min(520px, 92vw);
+      background: rgba(18,26,51,.7);
+      border:1px solid rgba(35,48,90,.7);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      overflow:hidden;
+    }
+    .authHead{
+      padding:14px 14px 10px 14px;
+      border-bottom:1px solid rgba(35,48,90,.55);
+      display:flex;
+      flex-direction:column;
+      align-items:stretch;
+      gap:10px;
+    }
+    .tabRow{
+      display:flex;
+      gap:10px;
+      justify-content:flex-start;
+      align-self:flex-start;
+    }
+    .tabBtn{
+      border:1px solid rgba(35,48,90,.9);
+      background: rgba(18,26,51,.75);
+      color:var(--text);
+      border-radius: 999px;
+      padding:8px 12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .tabBtn.active{
+      border-color: rgba(122,162,255,.75);
+      background: rgba(122,162,255,.14);
+    }
+    .authBody{ padding: 12px 14px 14px 14px; }
+    .authMsg{ margin-top:10px; color: var(--warn); font-size:12px; }
+    .authMsg.ok{ color: var(--good); }
+
+    .adminRow{
+      display:grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap:12px;
+      padding:10px;
+      background: rgba(15,23,48,.55);
+      border:1px solid rgba(35,48,90,.55);
+      border-radius: 12px;
+    }
+    @media (max-width: 900px){
+      .adminRow{ grid-template-columns: 1fr; }
+    }
+    .adminActions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+      align-items:center;
+    }
+
+    /* FRIENDS PANEL */
+    .friendRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px;
+      background: rgba(15,23,48,.55);
+      border:1px solid rgba(35,48,90,.55);
+      border-radius: 12px;
+    }
+    .friendLeft{ min-width:0; display:flex; flex-direction:column; gap:4px; }
+    .friendName{ font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH OVERLAY -->
+  <div id="authOverlay" class="overlay hidden" aria-modal="true" role="dialog">
+    <div class="authCard">
+      <div class="authHead">
+        <div>
+          <div style="font-weight:800;font-size:16px;">Zugriff</div>
+          <div class="subtitle" style="margin-top:4px;">Registrieren oder Anmelden (Supabase Auth).</div>
+        </div>
+        <div class="tabRow">
+          <button id="tabLogin" class="tabBtn active" type="button">Anmelden</button>
+          <button id="tabRegister" class="tabBtn" type="button">Registrieren</button>
+        </div>
+      </div>
+      <div class="authBody">
+        <div class="row">
+          <label for="authEmail">E-Mail</label>
+          <input id="authEmail" class="field" autocomplete="email" placeholder="z. B. alien42@mail.com" />
+        </div>
+        <div class="row">
+          <label for="authPass">Passwort</label>
+          <input id="authPass" class="field" type="password" autocomplete="current-password" placeholder="mind. 6 Zeichen" />
+        </div>
+        <div class="row" style="justify-content:flex-end;">
+          <button id="authSubmit" class="btn" type="button">Anmelden</button>
+        </div>
+        <div id="authMsg" class="authMsg"></div>
+        <div class="tiny" style="margin-top:10px;">
+          Hinweis: Wenn du E-Mail-Verifizierung in Supabase aktiv hast, musst du evtl. erst bestätigen.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP ROOT -->
+  <div id="appRoot" class="hidden">
+    <header>
+      <div class="topbar">
+        <div>
+          <h1>Habit-Tracker</h1>
+        </div>
+
+        <div class="dateRow">
+          <div id="userPill" class="pill info" style="display:none;">User: –</div>
+          <button class="btn ghost" id="logoutBtn" type="button" style="display:none;">Logout</button>
+
+          <div class="pill">
+            <span>Ausgewählter Tag:</span>
+            <input id="datePicker" type="date" style="background:transparent;border:none;color:var(--text);font:inherit;padding:0;outline:none;">
+          </div>
+
+          <button class="btn ghost" id="goTodayBtn" type="button">Heute</button>
+          <div id="modePill" class="pill info">Modus: Bearbeiten</div>
+          <div id="weightStatusPill" class="pill" style="display:none;"></div>
+        </div>
+      </div>
+    </header>
+
+    <section class="charts">
+      <div class="card">
+        <div class="cardHeader">
+          <h2>Monat: Tages-Score (0–100%)</h2>
+
+          <!-- Vergleich + Zurück -->
+          <div class="compareWrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+            <button id="backToMeBtn" class="btn ghost hidden" type="button">← Zurück</button>
+            <button id="compareBtn" class="btn ghost" type="button">Vergleichen ▾</button>
+            <div class="pill"><span id="monthLabel1">–</span></div>
+
+            <div id="comparePanel" class="comparePanel hidden" role="dialog" aria-modal="false">
+              <div class="comparePanelTitle">
+                <div style="font-weight:800;">Freunde auswählen</div>
+                <button id="compareCloseBtn" class="btn ghost" type="button">Schließen</button>
+              </div>
+              <div class="tiny" style="margin-bottom:10px;">
+                Haken setzen → Score-Linie erscheint im Diagramm. Klick auf Punkte öffnet das Profil dieses Freundes am gewählten Tag (nur Ansicht).
+              </div>
+              <div id="compareList" class="compareList"></div>
+              <div class="tiny" style="margin-top:10px;">
+                Hinweis: Farben sind automatisch/kontrastierend gewählt. Dein eigener Graph bleibt die Standard-Farbe.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cardBody">
+          <canvas id="scoreChart"></canvas>
+          <div class="clickHint">Klick: zeigt den Tag oben an. (Bei Freunden: öffnet deren Ansicht.)</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardHeader">
+          <h2>Monat: Schlafstunden</h2>
+          <div class="pill"><span id="monthLabel2">–</span></div>
+        </div>
+        <div class="cardBody">
+          <canvas id="sleepChart"></canvas>
+          <div class="tiny">Rote Linie = Schlafziel.</div>
+        </div>
+      </div>
+    </section>
+
+    <main>
+      <section class="card">
+        <div class="cardHeader">
+          <h2>Habits</h2>
+          <div class="pill"><span>Tages-Score:</span> <strong id="scoreLabel">0%</strong></div>
+        </div>
+        <div class="cardBody">
+          <div id="habitList" class="habitList"></div>
+          <div class="note" id="habitNote"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="cardHeader">
+          <h2>Fortschritt</h2>
+          <div class="pill"><span>Gewichtsumme:</span> <strong id="weightTotalLabel">100</strong><span>%</span></div>
+        </div>
+        <div class="cardBody progressWrap">
+          <div class="circleBox" aria-label="Tagesfortschritt als Prozentkreis">
+            <svg viewBox="0 0 120 120" role="img">
+              <defs>
+                <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="rgba(0,0,0,.45)"/>
+                </filter>
+              </defs>
+              <circle cx="60" cy="60" r="48" fill="none" stroke="rgba(35,48,90,.75)" stroke-width="12"></circle>
+              <circle id="progressCircle" cx="60" cy="60" r="48" fill="none"
+                stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
+                transform="rotate(-90 60 60)" filter="url(#softShadow)"></circle>
+            </svg>
+            <div class="circleCenter">
+              <div class="bigPct" id="circlePct">0%</div>
+              <div class="smallLbl" id="circleSub">0 / 100</div>
+            </div>
+          </div>
+          <div class="circleStats">
+            <div>Erledigt: <span class="kpi" id="doneCount">0</span></div>
+            <div>Habits: <span class="kpi" id="habitCount">0</span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <section class="editorSection">
+      <details id="editorDetails">
+        <summary>
+          <div class="sumLeft">
+            <div class="sumTitle">Bearbeiten: Habits, Gewichte & Ziele</div>
+            <div class="sumSub">Hinweis: Gewichtsumme sollte 100% sein (oder normieren).</div>
+          </div>
+          <div class="sumRight">
+            <span id="sumStatus">Summe: 100%</span>
+            <span>▾</span>
+          </div>
+        </summary>
+
+        <div class="editorBody">
+          <div class="panel">
+            <h3>Habit hinzufügen</h3>
+            <div class="row">
+              <label for="newHabitName">Name</label>
+              <input class="field" id="newHabitName" placeholder="z. B. Sport, Lesen …" />
+            </div>
+
+            <div class="row">
+              <label for="newHabitWeight">Gewicht (%)</label>
+              <input class="field" id="newHabitWeight" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
+            </div>
+
+            <div class="row">
+              <label>Numerisches Ziel?</label>
+              <div class="inlineToggle">
+                <label class="inlineToggle" for="newHabitIsNumeric" style="min-width:auto;">
+                  <input id="newHabitIsNumeric" type="checkbox" />
+                  <span>Ja</span>
+                </label>
+                <span class="tiny">(dann wird oben ein Ist-Wert eingetragen)</span>
+              </div>
+            </div>
+
+            <div class="row hidden" id="newHabitGoalRow">
+              <label for="newHabitGoal">Zielwert</label>
+              <input class="field" id="newHabitGoal" type="text" inputmode="decimal" placeholder="z. B. 2000" />
+              <span class="tiny">Standard: ≥ (mindestens)</span>
+            </div>
+
+            <div class="row">
+              <button class="btn" id="addHabitBtn" type="button">Hinzufügen</button>
+            </div>
+
+            <div class="help" id="addHelp"></div>
+          </div>
+
+          <div class="panel">
+            <h3>Gewichte & Ziele bearbeiten</h3>
+
+            <div class="weightsGrid weightsHead">
+              <div>Habit</div>
+              <div>Gewichtung (in %)</div>
+              <div>Ziel (z. B. 8 für 8h Schlaf)</div>
+              <div>Halbwert</div>
+              <div></div>
+            </div>
+
+            <div id="weightsList"></div>
+
+            <div class="totals">
+              <div>Gesamt: <span class="kpi" id="totalWeightKpi">100</span>%</div>
+              <div id="totalMsg" class="goodText">OK</div>
+            </div>
+
+            <div class="row" style="margin-top:10px;">
+              <button class="btn" id="normalizeBtn" type="button">Automatisch auf 100 normieren</button>
+              <button class="btn" id="resetBtn" type="button" style="border-color: rgba(255,107,107,.55);">Alles zurücksetzen</button>
+            </div>
+
+            <div class="help">
+              <span class="kpi">Dezimal:</span> Zahlen dürfen mit <span class="kpi">Komma</span> eingegeben werden (z. B. 6,5 oder 8,33).<br>
+              <span class="kpi">Halbwert:</span> Bei Zielverfehlung wird pro (Abweichung / Halbwert) die Gewichtung exponentiell halbiert (kontinuierlich).
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- FRIENDS (BOTTOM + COLLAPSIBLE) -->
+    <section class="editorSection">
+      <details id="friendsDetails" open>
+        <summary>
+          <div class="sumLeft">
+            <div class="sumTitle">Freunde & Anfragen</div>
+            <div class="sumSub">Verbinden, Anfragen annehmen, Profile besuchen.</div>
+          </div>
+          <div class="sumRight">
+            <span class="pill"><span id="friendsCount">0</span><span>verbunden</span></span>
+            <span class="pill"><span id="reqCount">0</span><span>offen</span></span>
+            <span>▾</span>
+          </div>
+        </summary>
+
+        <div class="editorBody" style="grid-template-columns: 1fr 1fr;">
+          <div class="card" style="box-shadow:none;border-radius:14px;">
+            <div class="cardHeader">
+              <h2>Freunde</h2>
+              <div class="pill"><span id="friendsCount2">0</span><span>verbunden</span></div>
+            </div>
+            <div class="cardBody">
+              <div class="row" style="margin-top:0;">
+                <label for="friendSearchEmail">Freund hinzufügen (E-Mail)</label>
+                <input id="friendSearchEmail" class="field" placeholder="z. B. kumpel@mail.com" />
+                <button id="sendFriendReqBtn" class="btn" type="button">Einladen</button>
+              </div>
+              <div class="note" id="friendMsg"></div>
+              <div id="friendsList" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;"></div>
+            </div>
+          </div>
+
+          <div class="card" style="box-shadow:none;border-radius:14px;">
+            <div class="cardHeader">
+              <h2>Anfragen</h2>
+              <div class="pill"><span id="reqCount2">0</span><span>offen</span></div>
+            </div>
+            <div class="cardBody">
+              <div id="requestsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <!-- ADMIN ROOT -->
+  <div id="adminRoot" class="hidden" style="max-width:1200px;margin:16px auto 28px auto;padding:0 18px;">
+    <div class="card">
+      <div class="cardHeader">
+        <h2>Admin Panel</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <div class="pill info" id="adminPill">Admin</div>
+          <button class="btn ghost" id="adminLogoutBtn" type="button">Logout</button>
+        </div>
+      </div>
+      <div class="cardBody">
+        <div class="note" style="margin:0 0 10px 0;">
+          Admin sieht Profile (user_id + display_name + updated_at). (Für „alle sehen“ braucht man zusätzlich eine Admin-Policy oder Service-Key – hier bewusst nicht.)
+        </div>
+
+        <div class="row" style="justify-content:space-between;">
+          <div class="pill"><span>Profile sichtbar:</span> <strong id="adminUserCount">0</strong></div>
+          <button class="btn" id="adminRefreshBtn" type="button">Aktualisieren</button>
+        </div>
+
+        <div id="adminList" style="display:flex;flex-direction:column;gap:10px;margin-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    /**********************
+     * SUPABASE (CLIENT)  *
+     **********************/
+    const SUPABASE_URL = "https://rplxhwaewgucairblidf.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_iwV-5HtbITTyp0T5tBCmxQ_k_Gjo9Gv";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const ADMIN_USER_ID = "31c461d9-2345-43cd-94a6-e5503ac6bb78";
+
+    /**********************
+     * APP STATE MODEL    *
+     **********************/
+    const defaultState = () => ({
+      habits: [
+        { id: "sleep", name: "Schlaf", weight: 30, type: "numeric", goal: 7.5, dir: "MIN", halfLife: 0.5 },
+        { id: cryptoId(), name: "Bewegung", weight: 35, type: "check" },
+        { id: cryptoId(), name: "Lesen", weight: 35, type: "check" },
+      ],
+      dayData: {},
+      selectedDate: todayISO(),
+      viewOnly: false,
+    });
+
+    function cryptoId(){ return "h_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16); }
+    function todayISO(){ return toISODate(new Date()); }
+    function toISODate(d){
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,"0");
+      const day = String(d.getDate()).padStart(2,"0");
+      return `${y}-${m}-${day}`;
+    }
+    function parseISO(s){ const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); }
+    function fmtDateHuman(iso){
+      const d = parseISO(iso);
+      return d.toLocaleDateString("de-DE", { weekday:"short", year:"numeric", month:"2-digit", day:"2-digit" });
+    }
+    function daysInMonth(year, monthIndex0){ return new Date(year, monthIndex0+1, 0).getDate(); }
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+    function round2(n){ return Math.round(n*100)/100; }
+
+    function parseDecimalDE(v){
+      if(v == null) return NaN;
+      const s = String(v).trim().replace(/\s+/g,"").replace(",", ".");
+      if(s === "") return NaN;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : NaN;
+    }
+    function formatDecimalDE(n, digits=2){
+      if(n == null || !Number.isFinite(n)) return "";
+      const fixed = (digits != null) ? Number(n).toFixed(digits) : String(n);
+      const trimmed = fixed.replace(/\.?0+$/,"");
+      return trimmed.replace(".", ",");
+    }
+
+    function migrateFromOlder(st){
+      if(!st || typeof st !== "object") return defaultState();
+      if(!st.habits?.some(h => h.id === "sleep")){
+        st.habits = [{ id:"sleep", name:"Schlaf", weight:30, type:"numeric", goal:7.5, dir:"MIN", halfLife:0.5 }, ...(st.habits||[])];
+      }
+      st.habits = (st.habits||[]).map(h => {
+        if(h.type !== "numeric") return h;
+        return {
+          ...h,
+          dir: h.dir === "MAX" ? "MAX" : "MIN",
+          goal: Number.isFinite(Number(h.goal)) ? Number(h.goal) : null,
+          halfLife: Number.isFinite(Number(h.halfLife)) ? Number(h.halfLife) : null
+        };
+      });
+      if(typeof st.selectedDate !== "string") st.selectedDate = todayISO();
+      if(!st.dayData || typeof st.dayData !== "object") st.dayData = {};
+      st.viewOnly = false;
+      return st;
+    }
+
+    /**********************
+     * DB (profiles)       *
+     **********************/
+    async function getOrCreateProfile(user){
+      let { data, error } = await sb
+        .from("profiles")
+        .select("user_id, display_name, state, updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if(error) throw error;
+
+      if(!data){
+        const initial = defaultState();
+        const ins = {
+          user_id: user.id,
+          display_name: user.email || null,
+          state: initial,
+          updated_at: new Date().toISOString()
+        };
+        const res = await sb.from("profiles").insert(ins).select("user_id, display_name, state, updated_at").single();
+        if(res.error) throw res.error;
+        data = res.data;
+      }
+
+      return data;
+    }
+
+    /**********************
+     * GLOBAL SESSION      *
+     **********************/
+    let currentUser = null;     // auth user object
+    let profileRow = null;      // own profile row
+    let state = null;           // DEIN eigener State (bleibt immer dein State)
+    let viewingUserId = null;   // UI-Label (kann Freund sein)
+    let viewingName = null;
+
+    // Freund temporär ansehen, ohne Vergleich zu verlieren
+    let inspected = null;       // { user_id, display_name }
+    let inspectedState = null;  // migrated friend state
+
+    function uiState(){ return inspectedState || state; }
+    function uiIsViewOnly(){ return !!inspected || (viewingUserId !== currentUser?.id); }
+
+    // Friends cache for compare menu
+    let friendsCache = []; // [{ user_id, display_name }]
+    let compareSelected = new Set(); // user_ids
+    window.compareMeta = []; // aligned to datasets: [{ kind:"self"|"friend", user_id?, display_name? }]
+
+    // Save (debounced)
+    let saveTimer = null;
+    let saveInFlight = false;
+    let saveQueued = false;
+
+    function scheduleSaveState(){
+      if(!currentUser || !profileRow || !state) return;
+      if(state.viewOnly) return;
+      if(viewingUserId !== currentUser.id) return;
+
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => flushSaveState(), 350);
+    }
+
+    async function flushSaveState(){
+      if(!currentUser || !profileRow || !state) return;
+      if(state.viewOnly) return;
+      if(viewingUserId !== currentUser.id) return;
+
+      if(saveInFlight){
+        saveQueued = true;
+        return;
+      }
+      saveInFlight = true;
+      saveQueued = false;
+
+      const payload = {
+        state: { ...state, viewOnly:false },
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await sb
+        .from("profiles")
+        .update(payload)
+        .eq("user_id", currentUser.id);
+
+      saveInFlight = false;
+
+      if(error){
+        console.error("Save error:", error);
+      }
+      if(saveQueued){
+        await flushSaveState();
+      }
+    }
+
+    /****************
+     * UI REFS       *
+     ****************/
+    const appRoot = document.getElementById("appRoot");
+    const adminRoot = document.getElementById("adminRoot");
+
+    const datePicker = document.getElementById("datePicker");
+    const goTodayBtn = document.getElementById("goTodayBtn");
+    const modePill = document.getElementById("modePill");
+    const weightStatusPill = document.getElementById("weightStatusPill");
+
+    const habitListEl = document.getElementById("habitList");
+    const habitNoteEl = document.getElementById("habitNote");
+
+    const scoreLabel = document.getElementById("scoreLabel");
+    const weightTotalLabel = document.getElementById("weightTotalLabel");
+
+    const progressCircle = document.getElementById("progressCircle");
+    const circlePct = document.getElementById("circlePct");
+    const circleSub = document.getElementById("circleSub");
+    const doneCountEl = document.getElementById("doneCount");
+    const habitCountEl = document.getElementById("habitCount");
+
+    const monthLabel1 = document.getElementById("monthLabel1");
+    const monthLabel2 = document.getElementById("monthLabel2");
+    const backToMeBtn = document.getElementById("backToMeBtn");
+
+    const newHabitName = document.getElementById("newHabitName");
+    const newHabitWeight = document.getElementById("newHabitWeight");
+    const newHabitIsNumeric = document.getElementById("newHabitIsNumeric");
+    const newHabitGoalRow = document.getElementById("newHabitGoalRow");
+    const newHabitGoal = document.getElementById("newHabitGoal");
+
+    const addHabitBtn = document.getElementById("addHabitBtn");
+    const addHelp = document.getElementById("addHelp");
+
+    const weightsList = document.getElementById("weightsList");
+    const totalWeightKpi = document.getElementById("totalWeightKpi");
+    const totalMsg = document.getElementById("totalMsg");
+    const sumStatus = document.getElementById("sumStatus");
+
+    const normalizeBtn = document.getElementById("normalizeBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    const logoutBtn = document.getElementById("logoutBtn");
+    const userPill = document.getElementById("userPill");
+
+    // AUTH UI
+    const authOverlay = document.getElementById("authOverlay");
+    const tabLogin = document.getElementById("tabLogin");
+    const tabRegister = document.getElementById("tabRegister");
+    const authEmail = document.getElementById("authEmail");
+    const authPass = document.getElementById("authPass");
+    const authSubmit = document.getElementById("authSubmit");
+    const authMsg = document.getElementById("authMsg");
+
+    // ADMIN UI
+    const adminLogoutBtn = document.getElementById("adminLogoutBtn");
+    const adminRefreshBtn = document.getElementById("adminRefreshBtn");
+    const adminList = document.getElementById("adminList");
+    const adminUserCount = document.getElementById("adminUserCount");
+
+    // FRIEND UI
+    const friendSearchEmail = document.getElementById("friendSearchEmail");
+    const sendFriendReqBtn = document.getElementById("sendFriendReqBtn");
+    const friendMsg = document.getElementById("friendMsg");
+    const friendsList = document.getElementById("friendsList");
+    const requestsList = document.getElementById("requestsList");
+    const friendsCount = document.getElementById("friendsCount");
+    const reqCount = document.getElementById("reqCount");
+    const friendsCount2 = document.getElementById("friendsCount2");
+    const reqCount2 = document.getElementById("reqCount2");
+
+    // COMPARE UI
+    const compareBtn = document.getElementById("compareBtn");
+    const comparePanel = document.getElementById("comparePanel");
+    const compareCloseBtn = document.getElementById("compareCloseBtn");
+    const compareList = document.getElementById("compareList");
+
+    /********************
+     * SHOW/HIDE SCREENS *
+     ********************/
+    let authMode = "login";
+
+    function setAuthMode(mode){
+      authMode = mode === "register" ? "register" : "login";
+      tabLogin.classList.toggle("active", authMode === "login");
+      tabRegister.classList.toggle("active", authMode === "register");
+      authSubmit.textContent = authMode === "login" ? "Anmelden" : "Registrieren";
+      authPass.autocomplete = authMode === "login" ? "current-password" : "new-password";
+      setAuthMessage("");
+    }
+
+    tabLogin.addEventListener("click", () => setAuthMode("login"));
+    tabRegister.addEventListener("click", () => setAuthMode("register"));
+
+    function setAuthMessage(msg, { ok=false } = {}){
+      authMsg.textContent = msg || "";
+      authMsg.classList.toggle("ok", !!ok);
+    }
+
+    function showAuth(){
+      authOverlay.classList.remove("hidden");
+      adminRoot.classList.add("hidden");
+      appRoot.classList.add("hidden");
+      userPill.style.display = "none";
+      logoutBtn.style.display = "none";
+      authEmail.value = "";
+      authPass.value = "";
+      setAuthMode("login");
+      authEmail.focus();
+    }
+
+    function showApp(){
+      authOverlay.classList.add("hidden");
+      adminRoot.classList.add("hidden");
+      appRoot.classList.remove("hidden");
+      userPill.style.display = "inline-flex";
+      userPill.textContent = `User: ${viewingName || profileRow?.display_name || currentUser?.email || "—"}${uiIsViewOnly() ? " (Ansicht)" : ""}`;
+      logoutBtn.style.display = "inline-flex";
+    }
+
+    function showAdmin(){
+      authOverlay.classList.add("hidden");
+      appRoot.classList.add("hidden");
+      adminRoot.classList.remove("hidden");
+      userPill.style.display = "none";
+      logoutBtn.style.display = "none";
+      renderAdminPanel();
+    }
+
+    /****************
+     * AUTH HANDLERS *
+     ****************/
+    async function handleAuthSubmit(){
+      try{
+        setAuthMessage("");
+
+        const email = String(authEmail.value||"").trim();
+        const password = String(authPass.value||"");
+
+        if(!email) throw new Error("E-Mail fehlt.");
+        if(password.length < 6) throw new Error("Passwort zu kurz (min. 6).");
+
+        if(authMode === "register"){
+          const { data, error } = await sb.auth.signUp({ email, password });
+          if(error) throw error;
+
+          const user = data?.user;
+          if(!user){
+            setAuthMessage("Registriert. Falls E-Mail-Verifizierung aktiv ist: bestätigen, dann einloggen.", { ok:true });
+            return;
+          }
+
+          await postLogin(user);
+          return;
+        }
+
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if(error) throw error;
+
+        await postLogin(data.user);
+      }catch(e){
+        setAuthMessage(e?.message ? String(e.message) : "Fehler.");
+      }
+    }
+
+    async function postLogin(user){
+      currentUser = user;
+      profileRow = await getOrCreateProfile(user);
+
+      // Self laden
+      await loadProfileForView(user.id, profileRow.display_name || user.email || "—", { viewOnly:false });
+
+      if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID) showAdmin();
+      else showApp();
+
+      await refreshFriendsUI();
+      buildCompareMenu();
+      await refreshCompareDatasets();
+    }
+
+    authSubmit.addEventListener("click", handleAuthSubmit);
+    authPass.addEventListener("keydown", (e) => { if(e.key === "Enter") handleAuthSubmit(); });
+    authEmail.addEventListener("keydown", (e) => { if(e.key === "Enter") handleAuthSubmit(); });
+
+    async function logoutAll(){
+      await sb.auth.signOut();
+      currentUser = null;
+      profileRow = null;
+      state = null;
+      viewingUserId = null;
+      viewingName = null;
+      inspected = null;
+      inspectedState = null;
+      friendsCache = [];
+      compareSelected = new Set();
+      window.compareMeta = [];
+      destroyCharts();
+      showAuth();
+    }
+
+    logoutBtn.addEventListener("click", logoutAll);
+    adminLogoutBtn.addEventListener("click", logoutAll);
+
+    /**********************
+     * COMPARE MENU (UI)   *
+     **********************/
+    function toggleCompare(open){
+      const shouldOpen = (open != null) ? !!open : comparePanel.classList.contains("hidden");
+      comparePanel.classList.toggle("hidden", !shouldOpen);
+      compareBtn.textContent = shouldOpen ? "Vergleichen ▴" : "Vergleichen ▾";
+    }
+
+    compareBtn.addEventListener("click", () => toggleCompare());
+    compareCloseBtn.addEventListener("click", () => toggleCompare(false));
+
+    document.addEventListener("click", (e) => {
+      if(comparePanel.classList.contains("hidden")) return;
+      const inside = comparePanel.contains(e.target) || compareBtn.contains(e.target);
+      if(!inside) toggleCompare(false);
+    });
+
+    function buildCompareMenu(){
+      compareList.innerHTML = "";
+
+      if(!friendsCache.length){
+        const n = document.createElement("div");
+        n.className = "note";
+        n.textContent = "Noch keine Freunde verbunden.";
+        compareList.appendChild(n);
+        return;
+      }
+
+      for(const f of friendsCache){
+        const row = document.createElement("div");
+        row.className = "compareItem";
+
+        const left = document.createElement("div");
+        left.className = "compareItemLeft";
+
+        const nm = document.createElement("div");
+        nm.className = "compareItemName";
+        nm.textContent = f.display_name || (String(f.user_id).slice(0,8) + "…");
+
+        const meta = document.createElement("div");
+        meta.className = "tiny";
+        meta.textContent = `user_id: ${String(f.user_id).slice(0,8)}…`;
+
+        left.appendChild(nm);
+        left.appendChild(meta);
+
+        const chkWrap = document.createElement("label");
+        chkWrap.className = "check";
+        chkWrap.style.cursor = "pointer";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = compareSelected.has(f.user_id);
+        cb.addEventListener("change", async () => {
+          if(cb.checked) compareSelected.add(f.user_id);
+          else compareSelected.delete(f.user_id);
+          await refreshCompareDatasets();
+        });
+
+        const t = document.createElement("span");
+        t.textContent = "anzeigen";
+
+        chkWrap.appendChild(cb);
+        chkWrap.appendChild(t);
+
+        row.appendChild(left);
+        row.appendChild(chkWrap);
+        compareList.appendChild(row);
+      }
+    }
+
+    /**********************
+     * FRIENDS (DATA)      *
+     **********************/
+    function setFriendMsg(msg){ friendMsg.textContent = msg || ""; }
+
+    async function findUserByEmail(email){
+      const e = String(email||"").trim().toLowerCase();
+      if(!e) throw new Error("E-Mail fehlt.");
+
+      const { data, error } = await sb.rpc("find_profile_by_email", { p_email: e });
+      if(error) throw error;
+      if(!data || !data.length) return null;
+      return data[0];
+    }
+
+    async function sendFriendRequestByEmail(){
+      try{
+        setFriendMsg("");
+        const email = String(friendSearchEmail.value||"").trim();
+        const found = await findUserByEmail(email);
+        if(!found) throw new Error("Kein User mit dieser E-Mail gefunden (muss sich einmal registriert/eingeloggt haben).");
+        if(found.user_id === currentUser.id) throw new Error("Du kannst dich nicht selbst hinzufügen.");
+
+        const { error } = await sb.from("friend_requests").insert({
+          requester: currentUser.id,
+          requested: found.user_id,
+          status: "pending"
+        });
+        if(error) throw error;
+
+        friendSearchEmail.value = "";
+        setFriendMsg("Einladung gesendet.");
+        await refreshFriendsUI();
+        buildCompareMenu();
+        await refreshCompareDatasets();
+      }catch(e){
+        setFriendMsg(e?.message ? String(e.message) : "Fehler beim Einladen.");
+      }
+    }
+
+    sendFriendReqBtn.addEventListener("click", sendFriendRequestByEmail);
+
+    async function acceptRequest(reqId){
+      const { error } = await sb.from("friend_requests")
+        .update({ status:"accepted" })
+        .eq("id", reqId);
+      if(error) throw error;
+    }
+    async function declineRequest(reqId){
+      const { error } = await sb.from("friend_requests")
+        .update({ status:"declined" })
+        .eq("id", reqId);
+      if(error) throw error;
+    }
+    async function cancelRequest(reqId){
+      const { error } = await sb.from("friend_requests")
+        .update({ status:"canceled" })
+        .eq("id", reqId);
+      if(error) throw error;
+    }
+
+    async function refreshFriendsUI(){
+      if(!currentUser) return;
+
+      const reqRes = await sb
+        .from("friend_requests")
+        .select("id, requester, requested, status, created_at")
+        .eq("status","pending")
+        .or(`requester.eq.${currentUser.id},requested.eq.${currentUser.id}`)
+        .order("created_at", { ascending:false });
+
+      const requests = reqRes.data || [];
+      const incomingCount = requests.filter(r => r.requested === currentUser.id).length;
+      reqCount.textContent = String(incomingCount);
+      reqCount2.textContent = String(incomingCount);
+
+      const frRes = await sb
+        .from("friendships")
+        .select("user_a, user_b, created_at")
+        .order("created_at", { ascending:false });
+
+      const friendships = frRes.data || [];
+      friendsCount.textContent = String(friendships.length);
+      friendsCount2.textContent = String(friendships.length);
+
+      requestsList.innerHTML = "";
+      if(requests.length === 0){
+        const n = document.createElement("div");
+        n.className = "note";
+        n.textContent = "Keine offenen Anfragen.";
+        requestsList.appendChild(n);
+      } else {
+        for(const r of requests){
+          const isIncoming = (r.requested === currentUser.id);
+          const otherId = isIncoming ? r.requester : r.requested;
+
+          const row = document.createElement("div");
+          row.className = "friendRow";
+
+          const left = document.createElement("div");
+          left.className = "friendLeft";
+          const t = document.createElement("div");
+          t.className = "friendName";
+          t.textContent = isIncoming ? "Eingehende Anfrage" : "Ausgehende Anfrage";
+          const m = document.createElement("div");
+          m.className = "tiny";
+          m.textContent = `User: ${String(otherId).slice(0,8)}…`;
+          left.appendChild(t);
+          left.appendChild(m);
+
+          const right = document.createElement("div");
+          right.style.display = "flex";
+          right.style.gap = "10px";
+          right.style.flexWrap = "wrap";
+          right.style.justifyContent = "flex-end";
+
+          if(isIncoming){
+            const a = document.createElement("button");
+            a.className = "btn";
+            a.textContent = "Annehmen";
+            a.onclick = async () => {
+              try{
+                await acceptRequest(r.id);
+                await refreshFriendsUI();
+                buildCompareMenu();
+                await refreshCompareDatasets();
+              }catch(e){ alert(e.message||"Fehler"); }
+            };
+
+            const d = document.createElement("button");
+            d.className = "btn";
+            d.textContent = "Ablehnen";
+            d.style.borderColor = "rgba(255,107,107,.55)";
+            d.onclick = async () => {
+              try{
+                await declineRequest(r.id);
+                await refreshFriendsUI();
+                buildCompareMenu();
+                await refreshCompareDatasets();
+              }catch(e){ alert(e.message||"Fehler"); }
+            };
+
+            right.appendChild(a);
+            right.appendChild(d);
+          } else {
+            const c = document.createElement("button");
+            c.className = "btn";
+            c.textContent = "Abbrechen";
+            c.style.borderColor = "rgba(255,107,107,.55)";
+            c.onclick = async () => {
+              try{
+                await cancelRequest(r.id);
+                await refreshFriendsUI();
+                buildCompareMenu();
+                await refreshCompareDatasets();
+              }catch(e){ alert(e.message||"Fehler"); }
+            };
+            right.appendChild(c);
+          }
+
+          row.appendChild(left);
+          row.appendChild(right);
+          requestsList.appendChild(row);
+        }
+      }
+
+      friendsList.innerHTML = "";
+      friendsCache = [];
+
+      if(friendships.length === 0){
+        const n = document.createElement("div");
+        n.className = "note";
+        n.textContent = "Noch keine Freunde verbunden.";
+        friendsList.appendChild(n);
+      } else {
+        for(const f of friendships){
+          const otherId = (f.user_a === currentUser.id) ? f.user_b : (f.user_b === currentUser.id ? f.user_a : null);
+          if(!otherId) continue;
+
+          let display = String(otherId).slice(0,8) + "…";
+          try{
+            const { data } = await sb.from("profiles").select("display_name").eq("user_id", otherId).maybeSingle();
+            if(data?.display_name) display = data.display_name;
+          }catch{}
+
+          friendsCache.push({ user_id: otherId, display_name: display });
+
+          const row = document.createElement("div");
+          row.className = "friendRow";
+
+          const left = document.createElement("div");
+          left.className = "friendLeft";
+          const t = document.createElement("div");
+          t.className = "friendName";
+          t.textContent = display;
+          const m = document.createElement("div");
+          m.className = "tiny";
+          m.textContent = `user_id: ${String(otherId).slice(0,8)}…`;
+          left.appendChild(t);
+          left.appendChild(m);
+
+          const right = document.createElement("div");
+          right.style.display = "flex";
+          right.style.gap = "10px";
+          right.style.flexWrap = "wrap";
+          right.style.justifyContent = "flex-end";
+
+          const visitBtn = document.createElement("button");
+          visitBtn.className = "btn";
+          visitBtn.textContent = "Besuchen (nur Ansicht)";
+          visitBtn.onclick = async () => {
+            try{
+              await loadProfileForView(otherId, display, { viewOnly:true });
+              showApp();
+              await refreshCompareDatasets();
+            }catch(e){
+              alert(e?.message ? String(e.message) : "Fehler beim Laden.");
+            }
+          };
+
+          right.appendChild(visitBtn);
+
+          row.appendChild(left);
+          row.appendChild(right);
+          friendsList.appendChild(row);
+        }
+      }
+    }
+
+    /**********************
+     * LOAD PROFILE (VIEW) *
+     **********************/
+    async function loadProfileForView(userId, name, { viewOnly }){
+      const { data, error } = await sb
+        .from("profiles")
+        .select("user_id, display_name, state, updated_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if(error) throw error;
+      if(!data) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
+
+      // SELF laden -> echter state, inspection beenden
+      if(!viewOnly){
+        viewingUserId = currentUser.id;
+        viewingName = profileRow?.display_name || currentUser?.email || "—";
+
+        inspected = null;
+        inspectedState = null;
+
+        state = migrateFromOlder(data.state);
+        state.viewOnly = false;
+
+        updateBackButton();
+        bootAfterLogin();
+        userPill.textContent = `User: ${viewingName}`;
+        return;
+      }
+
+      // FRIEND inspecten -> state NICHT ersetzen
+      inspected = {
+        user_id: data.user_id,
+        display_name: name || data.display_name || "Freund"
+      };
+      inspectedState = migrateFromOlder(data.state);
+      inspectedState.viewOnly = true;
+
+      viewingUserId = data.user_id;
+      viewingName = inspected.display_name;
+
+      updateBackButton();
+      bootAfterLogin();
+      userPill.textContent = `User: ${viewingName} (Ansicht)`;
+    }
+
+    /****************
+     * STATE HELPERS *
+     ****************/
+    function ensureDayIn(st, iso){
+      if(!st.dayData[iso]) st.dayData[iso] = { checks:{}, values:{} };
+      const day = st.dayData[iso];
+      if(!day.checks) day.checks = {};
+      if(!day.values || typeof day.values !== "object") day.values = {};
+      return day;
+    }
+
+    function getNumericEntryIn(st, iso, habitId){
+      const day = ensureDayIn(st, iso);
+      if(!day.values[habitId]) day.values[habitId] = { value: null, text: "" };
+      const e = day.values[habitId];
+      if(!("value" in e)) e.value = null;
+      if(typeof e.text !== "string") e.text = "";
+      return e;
+    }
+
+    function getHabitDoneForDayIn(st, habit, iso){
+      const day = ensureDayIn(st, iso);
+
+      if(habit.type === "numeric"){
+        const goal = Number(habit.goal);
+        if(!Number.isFinite(goal)) return false;
+
+        const v = getNumericEntryIn(st, iso, habit.id).value;
+        if(v == null || Number.isNaN(v)) return false;
+
+        const dir = habit.dir === "MAX" ? "MAX" : "MIN";
+        return (dir === "MIN") ? (v >= goal) : (v <= goal);
+      }
+
+      return !!day.checks[habit.id];
+    }
+
+    function numericCreditIn(st, habit, iso){
+      const w = Number(habit.weight||0);
+      if(w <= 0) return 0;
+
+      const goal = Number(habit.goal);
+      if(!Number.isFinite(goal)) return 0;
+
+      const v = getNumericEntryIn(st, iso, habit.id).value;
+      if(v == null || Number.isNaN(v)) return 0;
+
+      const dir = habit.dir === "MAX" ? "MAX" : "MIN";
+      const done = (dir === "MIN") ? (v >= goal) : (v <= goal);
+      if(done) return w;
+
+      const half = Number(habit.halfLife);
+      if(!Number.isFinite(half) || half <= 0) return 0;
+
+      const delta = (dir === "MIN")
+        ? Math.max(0, goal - v)
+        : Math.max(0, v - goal);
+
+      const n = delta / half;
+      const factor = Math.pow(0.5, n);
+      return w * factor;
+    }
+
+    function totalWeightIn(st){ return st.habits.reduce((sum,h)=> sum + Number(h.weight||0), 0); }
+
+    function earnedWeightIn(st, iso){
+      let w=0;
+      for(const h of st.habits){
+        if(h.type === "numeric") w += numericCreditIn(st, h, iso);
+        else if(getHabitDoneForDayIn(st, h, iso)) w += Number(h.weight||0);
+      }
+      return w;
+    }
+
+    function dayScoreIn(st, iso){
+      const tw = totalWeightIn(st);
+      if(tw <= 0) return 0;
+      return round2((earnedWeightIn(st, iso)/tw)*100);
+    }
+
+    /****************
+     * APP LOGIC     *
+     ****************/
+    function ensureDaySelf(iso){ return ensureDayIn(state, iso); }
+    function getNumericEntrySelf(iso, habitId){ return getNumericEntryIn(state, iso, habitId); }
+
+    function setNumericValueForDay(iso, habitId, rawValue, { min=null, max=null } = {}){
+      if(uiIsViewOnly()) return; // nur self editierbar
+      const entry = getNumericEntrySelf(iso, habitId);
+
+      const s = String(rawValue ?? "").trim();
+      entry.text = s;
+
+      if(s === ""){
+        entry.value = null;
+      } else {
+        const n = parseDecimalDE(s);
+        if(Number.isFinite(n)){
+          let v = n;
+          if(min != null) v = Math.max(min, v);
+          if(max != null) v = Math.min(max, v);
+          entry.value = v;
+        }
+      }
+
+      scheduleSaveState();
+    }
+
+    function setHabitDoneForDay(habit, iso, done){
+      if(uiIsViewOnly()) return;
+      if(habit.type !== "check") return;
+      const day = ensureDaySelf(iso);
+      day.checks[habit.id] = !!done;
+      scheduleSaveState();
+    }
+
+    function opMeaning(dir){
+      return (dir === "MAX") ? "Maximal (Ist ≤ Ziel)" : "Mindestens (Ist ≥ Ziel)";
+    }
+
+    /***************
+     * CHARTS       *
+     ***************/
+    let scoreChart = null;
+    let sleepChart = null;
+
+    function destroyCharts(){
+      try{ if(scoreChart){ scoreChart.destroy(); scoreChart=null; } }catch{}
+      try{ if(sleepChart){ sleepChart.destroy(); sleepChart=null; } }catch{}
+    }
+
+    function monthTitleFromISO(iso){
+      const d = parseISO(iso);
+      return d.toLocaleDateString("de-DE", { month:"long", year:"numeric" });
+    }
+
+    function getSleepHabitFrom(st){
+      return st.habits.find(h => h.id === "sleep") || null;
+    }
+
+    function buildMonthSeriesFor(st, iso){
+      const d = parseISO(iso);
+      const y = d.getFullYear();
+      const m0 = d.getMonth();
+      const nDays = daysInMonth(y, m0);
+
+      const labels = [];
+      const scores = [];
+      const sleeps = [];
+
+      const sleepHabit = getSleepHabitFrom(st);
+      const goal = sleepHabit && Number.isFinite(Number(sleepHabit.goal)) ? Number(sleepHabit.goal) : 0;
+
+      for(let day=1; day<=nDays; day++){
+        labels.push(String(day));
+        const dateISO = toISODate(new Date(y, m0, day));
+        ensureDayIn(st, dateISO);
+        scores.push(dayScoreIn(st, dateISO));
+
+        const v = getNumericEntryIn(st, dateISO, "sleep").value;
+        sleeps.push(v == null ? null : Number(v));
+      }
+      const goals = Array.from({length:nDays}, ()=> goal);
+      return { labels, scores, sleeps, goals, year:y, monthIndex0:m0 };
+    }
+
+    function rgbaFromIndex(i){
+      const palette = [
+        "rgba(57,217,138,.95)",   // grün
+        "rgba(255,204,102,.95)",  // gelb
+        "rgba(255,107,107,.95)",  // rot
+        "rgba(196,140,255,.95)",  // violett
+        "rgba(80,200,255,.95)",   // cyan
+        "rgba(255,140,200,.95)"   // pink
+      ];
+      return palette[i % palette.length];
+    }
+
+    function baseScoreDataset(label, data, color, { dashed=false } = {}){
+      return {
+        label,
+        data,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 7,
+        pointHitRadius: 24,
+        tension: 0.25,
+        borderColor: color,
+        backgroundColor: color,
+        spanGaps: true,
+        borderDash: dashed ? [6,6] : undefined,
+      };
+    }
+
+    function initCharts(){
+      destroyCharts();
+      const ctx1 = document.getElementById("scoreChart").getContext("2d");
+      const ctx2 = document.getElementById("sleepChart").getContext("2d");
+
+      scoreChart = new Chart(ctx1, {
+        type: "line",
+        data: { labels: [], datasets: [] },
+        options: {
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{ legend:{ display:false } },
+          interaction: { mode: "nearest", axis: "x", intersect: true },
+          hover: { mode: "nearest", intersect: false },
+          scales:{ y:{ suggestedMin:0, suggestedMax:100, ticks:{ callback:(v)=> `${v}%` } } },
+          onClick: async (evt) => {
+            if(!scoreChart) return;
+
+            const monthISO = state?.selectedDate || todayISO(); // compare chart ist immer "self-month"
+            const series = buildMonthSeriesFor(state, monthISO);
+
+            const pts = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:true }, true);
+            let idx, dsIdx;
+            if(pts.length){
+              idx = pts[0].index;
+              dsIdx = pts[0].datasetIndex;
+            } else {
+              const pts2 = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:false }, true);
+              if(!pts2.length) return;
+              idx = pts2[0].index;
+              dsIdx = pts2[0].datasetIndex;
+            }
+
+            const iso2 = toISODate(new Date(series.year, series.monthIndex0, idx+1));
+
+            const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"self" };
+
+            // Freund geklickt -> inspect (ohne Vergleich zu verlieren)
+            if(meta.kind === "friend" && meta.user_id){
+              try{
+                const { data, error } = await sb
+                  .from("profiles")
+                  .select("user_id, display_name, state")
+                  .eq("user_id", meta.user_id)
+                  .maybeSingle();
+
+                if(error) throw error;
+                if(!data?.state) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
+
+                inspected = { user_id: data.user_id, display_name: data.display_name || meta.display_name || "Freund" };
+                inspectedState = migrateFromOlder(data.state);
+                inspectedState.viewOnly = true;
+
+                viewingUserId = inspected.user_id;
+                viewingName = inspected.display_name;
+
+                updateBackButton();
+                setSelectedDate(iso2, { viewOnly:true });
+                showApp();
+
+                await refreshCompareDatasets(); // self+friends bleiben sichtbar
+              }catch(e){
+                alert(e?.message ? String(e.message) : "Fehler beim Laden.");
+              }
+              return;
+            }
+
+            // Eigene Linie geklickt -> inspection beenden (optional)
+            if(inspected){
+              inspected = null;
+              inspectedState = null;
+              viewingUserId = currentUser?.id;
+              viewingName = profileRow?.display_name || currentUser?.email || "—";
+              updateBackButton();
+            }
+
+            setSelectedDate(iso2, { viewOnly:false });
+          }
+        }
+      });
+
+      sleepChart = new Chart(ctx2, {
+        type: "line",
+        data: { labels: [], datasets: [
+          { label:"Schlaf (h)", data:[], borderWidth:2, pointRadius:4, pointHoverRadius:7, pointHitRadius:16, tension:0.25, spanGaps:true, borderColor:"rgba(122,162,255,.95)" },
+          { label:"Ziel (h)", data:[], borderWidth:2, pointRadius:0, tension:0, spanGaps:true, borderDash:[6,6], borderColor:"rgba(255,107,107,.95)" }
+        ]},
+        options: {
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{ legend:{ display:false } },
+          interaction: { mode: "nearest", axis: "x", intersect: true },
+          hover: { mode: "nearest", intersect: true },
+          scales:{ y:{ suggestedMin:0, suggestedMax:10, ticks:{ callback:(v)=> `${v} h` } } }
+        }
+      });
+
+      repaintCharts();
+    }
+
+    async function refreshCompareDatasets(){
+      if(!scoreChart || !state) return;
+
+      const monthISO = state.selectedDate;
+
+      // IMMER dein Profil als self-Linie
+      const selfSeries = buildMonthSeriesFor(state, monthISO);
+
+      const datasets = [];
+      window.compareMeta = [];
+
+      const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
+      datasets.push(baseScoreDataset(selfLabel, selfSeries.scores, "rgba(122,162,255,.95)"));
+      window.compareMeta.push({ kind:"self" });
+
+      // Freunde als zusätzliche Linien (auch wenn du gerade inspected bist)
+      if(compareSelected?.size > 0){
+        const selectedIds = Array.from(compareSelected);
+        let colorIdx = 0;
+
+        for(const uid of selectedIds){
+          if(uid === currentUser?.id) continue;
+          try{
+            const { data, error } = await sb
+              .from("profiles")
+              .select("user_id, display_name, state")
+              .eq("user_id", uid)
+              .maybeSingle();
+
+            if(error) throw error;
+            if(!data?.state) continue;
+
+            const st = migrateFromOlder(data.state);
+            st.viewOnly = true;
+
+            const s = buildMonthSeriesFor(st, monthISO);
+
+            colorIdx += 1;
+            const col = rgbaFromIndex(colorIdx);
+            const label = data.display_name || (String(uid).slice(0,8) + "…");
+
+            datasets.push(baseScoreDataset(label, s.scores, col));
+            window.compareMeta.push({ kind:"friend", user_id: uid, display_name: label });
+          }catch(e){
+            console.warn("Compare fetch failed:", uid, e);
+          }
+        }
+      }
+
+      scoreChart.data.labels = selfSeries.labels;
+      scoreChart.data.datasets = datasets;
+      scoreChart.update();
+    }
+
+    function repaintCharts(){
+      if(!scoreChart || !sleepChart || !state) return;
+
+      monthLabel1.textContent = monthTitleFromISO(state.selectedDate);
+      monthLabel2.textContent = monthTitleFromISO(uiState().selectedDate);
+
+      // Sleep chart zeigt den gerade angesehenen State (self oder inspected)
+      const st = uiState();
+      const series = buildMonthSeriesFor(st, st.selectedDate);
+
+      sleepChart.data.labels = series.labels;
+      sleepChart.data.datasets[0].data = series.sleeps;
+      sleepChart.data.datasets[1].data = series.goals;
+      sleepChart.update();
+
+      // Score chart muss immer self+friends bleiben
+      refreshCompareDatasets();
+    }
+
+    /*****************
+     * RENDERING      *
+     *****************/
+    function enhanceInput(el, { onEnter } = {}){
+      if(!el) return;
+      el.addEventListener("focus", () => { if(typeof el.select === "function") el.select(); });
+      el.addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){
+          e.preventDefault();
+          if(onEnter) onEnter();
+          else el.blur();
+        }
+      });
+    }
+
+    function setAddNumericUI(){
+      const on = !!newHabitIsNumeric.checked;
+      newHabitGoalRow.classList.toggle("hidden", !on);
+      if(on) newHabitGoal.focus();
+    }
+    newHabitIsNumeric.addEventListener("change", setAddNumericUI);
+
+    function ampelColor(pct){
+      const p = clamp(pct, 0, 100) / 100;
+      const hue = 0 + 120 * p;
+      return `hsl(${hue} 85% 55%)`;
+    }
+    function setCircle(percent){
+      const pct = clamp(percent, 0, 100);
+      const r = 48;
+      const circ = 2 * Math.PI * r;
+      progressCircle.style.strokeDasharray = `${circ} ${circ}`;
+      progressCircle.style.strokeDashoffset = circ * (1 - pct/100);
+      progressCircle.style.stroke = ampelColor(pct);
+      circlePct.textContent = `${Math.round(pct)}%`;
+      circleSub.textContent = `${Math.round(pct)} / 100`;
+    }
+
+    function setSelectedDate(iso, { viewOnly=false } = {}){
+      const st = uiState();
+      st.selectedDate = iso;
+      ensureDayIn(st, iso);
+
+      datePicker.value = iso;
+
+      // Self bleibt editierbar, friend immer viewOnly
+      if(st === state){
+        state.viewOnly = !!viewOnly || (viewingUserId !== currentUser?.id);
+        if(!state.viewOnly) scheduleSaveState();
+      }else{
+        st.viewOnly = true;
+      }
+
+      rerenderAll();
+    }
+
+    datePicker.addEventListener("change", () => {
+      const iso = datePicker.value;
+      if(!iso) return;
+      // Wenn du gerade inspected bist, soll der Datepicker trotzdem den inspected Tag setzen (Ansicht)
+      setSelectedDate(iso, { viewOnly: uiIsViewOnly() });
+    });
+
+    goTodayBtn.addEventListener("click", () => {
+      // Heute: wenn inspected -> heute im inspected (Ansicht); wenn self -> heute (edit)
+      setSelectedDate(todayISO(), { viewOnly: uiIsViewOnly() });
+    });
+
+    function updateBackButton(){
+      if(!backToMeBtn) return;
+      backToMeBtn.classList.toggle("hidden", !inspected);
+    }
+
+    if(backToMeBtn){
+      backToMeBtn.addEventListener("click", async () => {
+        // zurück zu dir + heute
+        inspected = null;
+        inspectedState = null;
+        viewingUserId = currentUser?.id;
+        viewingName = profileRow?.display_name || currentUser?.email || "—";
+
+        updateBackButton();
+        setSelectedDate(todayISO(), { viewOnly:false });
+
+        await refreshCompareDatasets();
+        showApp();
+      });
+    }
+
+    function renderTop(){
+      const st = uiState();
+      const iso = st.selectedDate;
+      const viewOnly = uiIsViewOnly();
+
+      if(viewOnly){
+        modePill.textContent = "Modus: Nur Ansicht";
+        modePill.className = "pill info lockBadge";
+      }else{
+        modePill.textContent = "Modus: Bearbeiten";
+        modePill.className = "pill info";
+      }
+
+      const score = dayScoreIn(st, iso);
+      scoreLabel.textContent = `${Math.round(score)}%`;
+      setCircle(score);
+
+      // doneCount + habitCount aus aktuellem st
+      let c=0;
+      for(const h of st.habits) if(getHabitDoneForDayIn(st, h, iso)) c++;
+      doneCountEl.textContent = String(c);
+      habitCountEl.textContent = String(st.habits.length);
+
+      const tw = totalWeightIn(st);
+      weightTotalLabel.textContent = String(round2(tw));
+
+      const sum = round2(tw);
+      if(Math.abs(sum - 100) > 1e-6){
+        weightStatusPill.style.display = "inline-flex";
+        weightStatusPill.className = "pill " + (sum > 100 ? "bad" : "warn");
+        weightStatusPill.innerHTML = `<span>Gewichtsumme ≠ 100:</span><strong>${sum}%</strong>`;
+      }else{
+        weightStatusPill.style.display = "none";
+      }
+
+      const sleepHabit = getSleepHabitFrom(st);
+      const sleepEntry = getNumericEntryIn(st, iso, "sleep");
+      const sleepV = sleepEntry.value;
+      const sleepGoal = sleepHabit && Number.isFinite(Number(sleepHabit.goal)) ? Number(sleepHabit.goal) : 0;
+      const sleepDone = sleepHabit ? getHabitDoneForDayIn(st, sleepHabit, iso) : false;
+
+      habitNoteEl.textContent =
+        `Profil: ${viewingName || "—"} · Tag: ${fmtDateHuman(iso)} · Schlaf: ${sleepV == null ? "—" : formatDecimalDE(sleepV, 2)} h (Ziel: ${formatDecimalDE(sleepGoal, 2)} h) → ${sleepDone ? "erledigt" : "nicht erledigt"} · ` +
+        `Angerechnete Gewichte: ${round2(earnedWeightIn(st, iso))} / ${round2(tw)}`;
+    }
+
+    function renderHabitList(){
+      habitListEl.innerHTML = "";
+      const st = uiState();
+      const iso = st.selectedDate;
+      const viewOnly = uiIsViewOnly();
+      const sortedHabits = [...st.habits].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
+
+      for(const h of sortedHabits){
+        const row = document.createElement("div");
+        row.className = "habitRow";
+
+        const left = document.createElement("div");
+        left.className = "habitLeft";
+
+        const name = document.createElement("div");
+        name.className = "habitName";
+        name.textContent = h.name;
+
+        const meta = document.createElement("div");
+        meta.className = "habitMeta";
+
+        const b1 = document.createElement("span");
+        b1.className = "metaBadge";
+        b1.textContent = `Gewicht: ${formatDecimalDE(Number(h.weight||0), 2)}%`;
+        meta.appendChild(b1);
+
+        if(h.type === "numeric" && Number.isFinite(Number(h.goal))){
+          const b2 = document.createElement("span");
+          b2.className = "metaBadge";
+          const halfTxt = (Number.isFinite(Number(h.halfLife)) && Number(h.halfLife) > 0) ? `, Halbwert: ${formatDecimalDE(Number(h.halfLife), 2)}` : "";
+          b2.textContent = `Ziel: ${(h.dir === "MAX") ? "max." : "mind."} ${formatDecimalDE(Number(h.goal), 2)}${halfTxt}`;
+          meta.appendChild(b2);
+        }
+
+        if(viewOnly){
+          const lock = document.createElement("span");
+          lock.className = "metaBadge lockBadge";
+          lock.textContent = "Nur Ansicht";
+          meta.appendChild(lock);
+        }
+
+        left.appendChild(name);
+        left.appendChild(meta);
+
+        const right = document.createElement("div");
+        right.className = "habitRight";
+
+        if(h.type === "numeric"){
+          const input = document.createElement("input");
+          input.className = "numericInput";
+          input.type = "text";
+          input.placeholder = "Ist-Wert…";
+          input.inputMode = "decimal";
+          input.autocomplete = "off";
+          input.spellcheck = false;
+
+          const entry = getNumericEntryIn(st, iso, h.id);
+          input.value = (entry.text && entry.text.length)
+            ? entry.text
+            : (entry.value == null ? "" : formatDecimalDE(entry.value, 2));
+
+          enhanceInput(input);
+          input.disabled = viewOnly;
+          input.style.opacity = viewOnly ? ".55" : "1";
+
+          const label = document.createElement("label");
+          label.className = "check";
+          label.style.cursor = "default";
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = getHabitDoneForDayIn(st, h, iso);
+          cb.addEventListener("click", (e) => e.preventDefault());
+          cb.addEventListener("keydown", (e) => e.preventDefault());
+          cb.style.pointerEvents = "none";
+          cb.tabIndex = -1;
+
+          const txt = document.createElement("span");
+          txt.textContent = cb.checked ? "Erledigt" : "Offen";
+
+          label.appendChild(cb);
+          label.appendChild(txt);
+
+          input.addEventListener("input", () => {
+            if(viewOnly) return;
+
+            const isSleep = (h.id === "sleep");
+            setNumericValueForDay(iso, h.id, input.value, isSleep ? { min:0, max:24 } : {});
+            renderTop();
+            repaintCharts();
+            renderTotals();
+            renderAddHelp();
+
+            const doneNow = getHabitDoneForDayIn(st, h, iso);
+            txt.textContent = doneNow ? "Erledigt" : "Offen";
+            cb.checked = doneNow;
+          });
+
+          input.addEventListener("blur", () => {
+            if(viewOnly) return;
+
+            const n = parseDecimalDE(input.value);
+            const entry2 = getNumericEntrySelf(iso, h.id);
+
+            if(Number.isFinite(n)){
+              let v = n;
+              if(h.id === "sleep") v = clamp(v,0,24);
+              entry2.value = v;
+              entry2.text = formatDecimalDE(v, 2);
+            } else {
+              entry2.value = null;
+              entry2.text = "";
+            }
+
+            scheduleSaveState();
+            rerenderAll();
+          });
+
+          right.appendChild(input);
+          right.appendChild(label);
+        } else {
+          const label = document.createElement("label");
+          label.className = "check";
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = getHabitDoneForDayIn(st, h, iso);
+
+          const txt = document.createElement("span");
+          txt.textContent = cb.checked ? "Erledigt" : "Offen";
+
+          if(viewOnly){
+            cb.addEventListener("click", (e) => e.preventDefault());
+            cb.addEventListener("keydown", (e) => e.preventDefault());
+            cb.style.pointerEvents = "none";
+            cb.tabIndex = -1;
+            label.style.cursor = "default";
+          } else {
+            cb.addEventListener("change", () => {
+              // Änderungen immer in self-state
+              const selfHabit = state.habits.find(x => x.id === h.id) || h;
+              setHabitDoneForDay(selfHabit, iso, cb.checked);
+              txt.textContent = cb.checked ? "Erledigt" : "Offen";
+              rerenderAll();
+            });
+          }
+
+          label.appendChild(cb);
+          label.appendChild(txt);
+          right.appendChild(label);
+        }
+
+        row.appendChild(left);
+        row.appendChild(right);
+        habitListEl.appendChild(row);
+      }
+    }
+
+    function renderEditor(){
+      const st = uiState();
+      const viewOnly = uiIsViewOnly();
+
+      weightsList.innerHTML = "";
+      const sortedHabits = [...st.habits].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
+
+      for(const h of sortedHabits){
+        const rowWrap = document.createElement("div");
+        rowWrap.className = "weightsRow";
+
+        const grid = document.createElement("div");
+        grid.className = "weightsGrid";
+
+        const name = document.createElement("div");
+        name.className = "wName";
+        name.textContent = h.name;
+
+        const wInput = document.createElement("input");
+        wInput.className = "numSmall";
+        wInput.type = "number";
+        wInput.min = "0";
+        wInput.step = "0.1";
+        wInput.value = String(round2(Number(h.weight||0)));
+        wInput.inputMode = "decimal";
+        enhanceInput(wInput);
+        wInput.disabled = viewOnly;
+        wInput.style.opacity = viewOnly ? ".55" : "1";
+
+        wInput.addEventListener("input", () => {
+          if(viewOnly) return;
+          const n = Number(wInput.value);
+          h.weight = Number.isFinite(n) ? clamp(n, 0, 1000000) : 0;
+          scheduleSaveState();
+          renderTotals();
+          rerenderAll();
+        });
+
+        let goalCell;
+        let halfCell;
+
+        if(h.type === "numeric"){
+          goalCell = document.createElement("div");
+          goalCell.className = "goalCell";
+
+          const opBtn = document.createElement("button");
+          opBtn.className = "opBtn";
+          opBtn.type = "button";
+          opBtn.textContent = (h.dir === "MAX") ? "max." : "mind.";
+          opBtn.disabled = viewOnly;
+          opBtn.title = opMeaning(h.dir);
+
+          opBtn.addEventListener("click", () => {
+            if(viewOnly) return;
+            h.dir = (h.dir === "MAX") ? "MIN" : "MAX";
+            scheduleSaveState();
+            renderEditor();
+            rerenderAll();
+          });
+
+          const goalInput = document.createElement("input");
+          goalInput.className = "numSmall";
+          goalInput.type = "text";
+          goalInput.inputMode = "decimal";
+          goalInput.placeholder = "Ziel";
+          goalInput.value = (Number.isFinite(Number(h.goal))) ? formatDecimalDE(Number(h.goal), 2) : "";
+          enhanceInput(goalInput);
+          goalInput.disabled = viewOnly;
+          goalInput.style.opacity = viewOnly ? ".55" : "1";
+
+          goalInput.addEventListener("input", () => {
+            if(viewOnly) return;
+            const n = parseDecimalDE(goalInput.value);
+            if(Number.isFinite(n)){
+              h.goal = n;
+              scheduleSaveState();
+              rerenderAll();
+            }
+          });
+
+          goalInput.addEventListener("blur", () => {
+            if(viewOnly) return;
+            const n = parseDecimalDE(goalInput.value);
+            if(Number.isFinite(n)) goalInput.value = formatDecimalDE(n, 2);
+            scheduleSaveState();
+            renderEditor();
+            rerenderAll();
+          });
+
+          goalCell.appendChild(opBtn);
+          goalCell.appendChild(goalInput);
+
+          const halfInput = document.createElement("input");
+          halfInput.className = "numSmall";
+          halfInput.type = "text";
+          halfInput.inputMode = "decimal";
+          halfInput.placeholder = "Halbwert";
+          halfInput.value = (Number.isFinite(Number(h.halfLife))) ? formatDecimalDE(Number(h.halfLife), 2) : "";
+          enhanceInput(halfInput);
+          halfInput.disabled = viewOnly;
+          halfInput.style.opacity = viewOnly ? ".55" : "1";
+
+          halfInput.addEventListener("input", () => {
+            if(viewOnly) return;
+            const n = parseDecimalDE(halfInput.value);
+            if(Number.isFinite(n)){
+              h.halfLife = Math.max(0, n);
+              scheduleSaveState();
+              rerenderAll();
+            }
+          });
+
+          halfInput.addEventListener("blur", () => {
+            if(viewOnly) return;
+            const n = parseDecimalDE(halfInput.value);
+            if(Number.isFinite(n)) halfInput.value = formatDecimalDE(Math.max(0, n), 2);
+            scheduleSaveState();
+            renderEditor();
+            rerenderAll();
+          });
+
+          halfCell = halfInput;
+        } else {
+          goalCell = document.createElement("div");
+          halfCell = document.createElement("div");
+        }
+
+        let actionEl;
+        if(h.id === "sleep"){
+          actionEl = document.createElement("div");
+          actionEl.style.color = "var(--muted)";
+          actionEl.style.fontSize = "12px";
+          actionEl.style.textAlign = "center";
+          actionEl.textContent = "—";
+        } else {
+          const xBtn = document.createElement("button");
+          xBtn.className = "iconX";
+          xBtn.type = "button";
+          xBtn.textContent = "×";
+          xBtn.title = "Löschen";
+          xBtn.disabled = viewOnly;
+
+          xBtn.addEventListener("click", () => {
+            if(viewOnly) return;
+
+            // Änderungen nur im self-state
+            state.habits = state.habits.filter(x => x.id !== h.id);
+            for(const dayIso of Object.keys(state.dayData)){
+              const day = state.dayData[dayIso];
+              if(day?.checks && (h.id in day.checks)) delete day.checks[h.id];
+              if(day?.values && (h.id in day.values)) delete day.values[h.id];
+            }
+            scheduleSaveState();
+            renderEditor();
+            rerenderAll();
+          });
+
+          actionEl = xBtn;
+        }
+
+        grid.appendChild(name);
+        grid.appendChild(wInput);
+        grid.appendChild(goalCell);
+        grid.appendChild(halfCell);
+        grid.appendChild(actionEl);
+
+        rowWrap.appendChild(grid);
+        weightsList.appendChild(rowWrap);
+      }
+
+      renderTotals();
+      renderAddHelp();
+    }
+
+    function renderTotals(){
+      const st = uiState();
+      const sum = totalWeightIn(st);
+      totalWeightKpi.textContent = String(round2(sum));
+      sumStatus.textContent = `Summe: ${round2(sum)}%`;
+
+      if(Math.abs(sum - 100) < 1e-6){
+        totalMsg.textContent = "OK";
+        totalMsg.className = "goodText";
+        sumStatus.className = "";
+      } else if(sum < 100){
+        totalMsg.textContent = `Fehlen: ${round2(100 - sum)}%`;
+        totalMsg.className = "warnText";
+        sumStatus.className = "warnText";
+      } else {
+        totalMsg.textContent = `Zu viel: ${round2(sum - 100)}%`;
+        totalMsg.className = "badText";
+        sumStatus.className = "badText";
+      }
+    }
+
+    function renderAddHelp(){
+      const st = uiState();
+      const sum = totalWeightIn(st);
+      addHelp.textContent =
+        `Gewichtsumme aktuell: ${round2(sum)}%. ` +
+        (Math.abs(sum-100) < 1e-6 ? `OK.` : `Passe Gewichte an oder nutze "Normieren".`);
+    }
+
+    function addHabit(){
+      if(uiIsViewOnly()) return;
+
+      const name = (newHabitName.value || "").trim();
+      const w = Number(newHabitWeight.value || 0);
+      const makeNumeric = !!newHabitIsNumeric.checked;
+
+      if(!name){ addHelp.textContent = "Bitte einen Namen eingeben."; return; }
+      if(!Number.isFinite(w) || w < 0){ addHelp.textContent = "Bitte ein gültiges Gewicht (>= 0) eingeben."; return; }
+
+      if(makeNumeric){
+        const gRaw = (newHabitGoal.value || "").trim();
+        const g = parseDecimalDE(gRaw);
+        if(!gRaw || !Number.isFinite(g)){
+          addHelp.textContent = "Bitte einen gültigen Zielwert eingeben (z. B. 2000).";
+          return;
+        }
+        state.habits.push({
+          id: cryptoId(),
+          name,
+          weight: w,
+          type: "numeric",
+          goal: g,
+          dir: "MIN",
+          halfLife: 1
+        });
+      } else {
+        state.habits.push({ id: cryptoId(), name, weight: w, type: "check" });
+      }
+
+      newHabitName.value = "";
+      newHabitWeight.value = "0";
+      newHabitIsNumeric.checked = false;
+      newHabitGoal.value = "";
+      setAddNumericUI();
+
+      scheduleSaveState();
+      renderEditor();
+      rerenderAll();
+    }
+
+    addHabitBtn.addEventListener("click", addHabit);
+    enhanceInput(newHabitName, { onEnter: addHabit });
+    enhanceInput(newHabitWeight, { onEnter: addHabit });
+    enhanceInput(newHabitGoal, { onEnter: addHabit });
+
+    normalizeBtn.addEventListener("click", () => {
+      if(uiIsViewOnly()) return;
+
+      const sum = totalWeightIn(state);
+      if(sum <= 0){
+        const per = 100 / state.habits.length;
+        for(const h of state.habits) h.weight = per;
+      } else {
+        for(const h of state.habits){
+          h.weight = (Number(h.weight||0) / sum) * 100;
+        }
+      }
+      for(const h of state.habits) h.weight = round2(h.weight);
+
+      let drift = round2(100 - totalWeightIn(state));
+      if(Math.abs(drift) >= 0.01){
+        let maxIdx = 0;
+        for(let i=1;i<state.habits.length;i++){
+          if(state.habits[i].weight > state.habits[maxIdx].weight) maxIdx = i;
+        }
+        state.habits[maxIdx].weight = round2(state.habits[maxIdx].weight + drift);
+      }
+
+      scheduleSaveState();
+      renderEditor();
+      rerenderAll();
+    });
+
+    resetBtn.addEventListener("click", () => {
+      if(uiIsViewOnly()) return;
+      if(!confirm("Wirklich alles zurücksetzen?")) return;
+      state = defaultState();
+      scheduleSaveState();
+      datePicker.value = state.selectedDate;
+      repaintCharts();
+      renderEditor();
+      rerenderAll();
+    });
+
+    function rerenderAll(){
+      renderHabitList();
+      renderTop();
+      renderTotals();
+      renderAddHelp();
+      repaintCharts();
+    }
+
+    function bootAfterLogin(){
+      const st = uiState();
+      ensureDayIn(st, st.selectedDate);
+      datePicker.value = st.selectedDate;
+      initCharts();
+      renderEditor();
+      setAddNumericUI();
+      rerenderAll();
+    }
+
+    /*****************
+     * ADMIN PANEL UI *
+     *****************/
+    function fmtTs(ts){
+      try{ return new Date(ts).toLocaleString("de-DE"); }catch{ return "—"; }
+    }
+
+    async function renderAdminPanel(){
+      adminList.innerHTML = "";
+      adminUserCount.textContent = "0";
+
+      const { data, error } = await sb
+        .from("profiles")
+        .select("user_id, display_name, updated_at")
+        .order("updated_at", { ascending:false });
+
+      if(error){
+        const err = document.createElement("div");
+        err.className = "note";
+        err.textContent = "Admin-Select fehlgeschlagen (RLS blockiert).";
+        adminList.appendChild(err);
+        console.error(error);
+        return;
+      }
+
+      const entries = data || [];
+      adminUserCount.textContent = String(entries.length);
+
+      if(entries.length === 0){
+        const empty = document.createElement("div");
+        empty.className = "note";
+        empty.textContent = "Keine Profile sichtbar.";
+        adminList.appendChild(empty);
+        return;
+      }
+
+      for(const rec of entries){
+        const row = document.createElement("div");
+        row.className = "adminRow";
+
+        const left = document.createElement("div");
+        left.style.minWidth = "0";
+
+        const title = document.createElement("div");
+        title.style.fontWeight = "800";
+        title.style.overflow = "hidden";
+        title.style.textOverflow = "ellipsis";
+        title.style.whiteSpace = "nowrap";
+        title.textContent = rec.display_name || rec.user_id;
+
+        const meta = document.createElement("div");
+        meta.className = "habitMeta";
+        meta.style.marginTop = "6px";
+
+        const b1 = document.createElement("span");
+        b1.className = "metaBadge";
+        b1.textContent = `user_id: ${String(rec.user_id).slice(0,8)}…`;
+
+        const b2 = document.createElement("span");
+        b2.className = "metaBadge";
+        b2.textContent = `updated: ${rec.updated_at ? fmtTs(rec.updated_at) : "—"}`;
+
+        meta.appendChild(b1);
+        meta.appendChild(b2);
+
+        left.appendChild(title);
+        left.appendChild(meta);
+
+        const right = document.createElement("div");
+        right.className = "adminActions";
+
+        const note = document.createElement("div");
+        note.className = "note";
+        note.style.margin = "0";
+        note.textContent = "UI-Admin (DB-Admin nur mit eigener Policy/Service-Key).";
+
+        right.appendChild(note);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        adminList.appendChild(row);
+      }
+    }
+
+    adminRefreshBtn.addEventListener("click", renderAdminPanel);
+
+    /********
+     * START *
+     ********/
+    (async function start(){
+      const { data, error } = await sb.auth.getSession();
+      if(error){
+        console.error(error);
+        showAuth();
+        return;
+      }
+
+      const sess = data?.session;
+      if(!sess?.user){
+        showAuth();
+        return;
+      }
+
+      try{
+        await postLogin(sess.user);
+      }catch(e){
+        console.error(e);
+        showAuth();
+      }
+    })();
+  </script>
+</body>
+</html>
