@@ -945,7 +945,7 @@
     // Friends cache for compare menu
     let friendsCache = []; // [{ user_id, display_name }]
     let compareSelected = new Set(); // user_ids
-    window.compareMeta = []; // aligned to datasets: [{ kind:"self"|"friend", user_id?, display_name? }]
+    window.compareMeta = []; // aligned to datasets: [{ kind:"base"|"friend", user_id?, display_name? }]
 
     // Save (debounced)
     let saveTimer = null;
@@ -1757,8 +1757,10 @@
           onClick: async (evt) => {
             if(!scoreChart) return;
 
-            const monthISO = state?.selectedDate || todayISO(); // compare chart ist immer "self-month"
-            const series = buildMonthSeriesFor(state, monthISO);
+            // Monat/Labels immer vom aktuell angesehenen Profil (self oder besucht)
+            const baseSt = uiState();
+            const monthISO = baseSt?.selectedDate || todayISO();
+            const series = buildMonthSeriesFor(baseSt, monthISO);
 
             const pts = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:true }, true);
             let idx, dsIdx;
@@ -1774,9 +1776,9 @@
 
             const iso2 = toISODate(new Date(series.year, series.monthIndex0, idx+1));
 
-            const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"self" };
+            const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"base" };
 
-            // Freund geklickt -> inspect (ohne Vergleich zu verlieren)
+            // Freund-Linie geklickt -> inspect (ohne Vergleich zu verlieren)
             if(meta.kind === "friend" && meta.user_id){
               try{
                 const { data, error } = await sb
@@ -1799,23 +1801,15 @@
                 setSelectedDate(iso2, { viewOnly:true });
                 showApp();
 
-                await refreshCompareDatasets(); // self+friends bleiben sichtbar
+                await refreshCompareDatasets();
               }catch(e){
                 alert(e?.message ? String(e.message) : "Fehler beim Laden.");
               }
               return;
             }
 
-            // Eigene Linie geklickt -> inspection beenden (optional)
-            if(inspected){
-              inspected = null;
-              inspectedState = null;
-              viewingUserId = currentUser?.id;
-              viewingName = profileRow?.display_name || currentUser?.email || "—";
-              updateBackButton();
-            }
-
-            setSelectedDate(iso2, { viewOnly:false });
+            // Basis-Linie geklickt -> nur Tag wechseln (im aktuell angesehenen Profil)
+            setSelectedDate(iso2, { viewOnly: uiIsViewOnly() });
           }
         }
       });
@@ -1840,27 +1834,31 @@
     }
 
     async function refreshCompareDatasets(){
-      if(!scoreChart || !state) return;
+      if(!scoreChart) return;
 
-      const monthISO = state.selectedDate;
+      // Basis = aktuell angesehenes Profil (self oder besucht)
+      const baseSt = uiState();
+      if(!baseSt) return;
 
-      // IMMER dein Profil als self-Linie
-      const selfSeries = buildMonthSeriesFor(state, monthISO);
+      const monthISO = baseSt.selectedDate;
+      const baseSeries = buildMonthSeriesFor(baseSt, monthISO);
 
       const datasets = [];
       window.compareMeta = [];
 
-      const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
-      datasets.push(baseScoreDataset(selfLabel, selfSeries.scores, "rgba(122,162,255,.95)"));
-      window.compareMeta.push({ kind:"self" });
+      const baseLabel = (viewingName || profileRow?.display_name || currentUser?.email || "Profil");
+      datasets.push(baseScoreDataset(baseLabel, baseSeries.scores, "rgba(122,162,255,.95)"));
+      window.compareMeta.push({ kind:"base", user_id: viewingUserId, display_name: baseLabel });
 
-      // Freunde als zusätzliche Linien (auch wenn du gerade inspected bist)
+      // Zusätzliche Freunde als Linien
       if(compareSelected?.size > 0){
         const selectedIds = Array.from(compareSelected);
         let colorIdx = 0;
 
         for(const uid of selectedIds){
-          if(uid === currentUser?.id) continue;
+          // nicht doppelt die Basis anzeigen
+          if(uid === viewingUserId) continue;
+
           try{
             const { data, error } = await sb
               .from("profiles")
@@ -1888,19 +1886,22 @@
         }
       }
 
-      scoreChart.data.labels = selfSeries.labels;
+      scoreChart.data.labels = baseSeries.labels;
       scoreChart.data.datasets = datasets;
       scoreChart.update();
     }
 
     function repaintCharts(){
-      if(!scoreChart || !sleepChart || !state) return;
+      if(!scoreChart || !sleepChart) return;
 
-      monthLabel1.textContent = monthTitleFromISO(state.selectedDate);
-      monthLabel2.textContent = monthTitleFromISO(uiState().selectedDate);
+      const st = uiState();
+      if(!st) return;
+
+      // Beide Monatslabels folgen dem aktuell angesehenen Profil
+      monthLabel1.textContent = monthTitleFromISO(st.selectedDate);
+      monthLabel2.textContent = monthTitleFromISO(st.selectedDate);
 
       // Sleep chart zeigt den gerade angesehenen State (self oder inspected)
-      const st = uiState();
       const series = buildMonthSeriesFor(st, st.selectedDate);
 
       sleepChart.data.labels = series.labels;
@@ -1908,7 +1909,7 @@
       sleepChart.data.datasets[1].data = series.goals;
       sleepChart.update();
 
-      // Score chart muss immer self+friends bleiben
+      // Score chart soll ebenfalls dem angesehenen Profil folgen
       refreshCompareDatasets();
     }
 
