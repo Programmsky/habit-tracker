@@ -589,13 +589,13 @@
     .friendLeft{ min-width:0; display:flex; flex-direction:column; gap:4px; }
     .friendName{ font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-    /* TRI-STATE BOX (flat, closer to original look) */
-    .triBox{
+    /* MARK (match old check style) */
+    .mark{
       width:18px;
       height:18px;
-      border-radius:5px;
+      border-radius:4px;
       border:1px solid rgba(35,48,90,.75);
-      background: rgba(10,14,30,.18);
+      background: transparent;
       display:inline-flex;
       align-items:center;
       justify-content:center;
@@ -603,27 +603,32 @@
       line-height:1;
       user-select:none;
       flex: 0 0 auto;
-      font-size:12px;
+      font-size:14px;
     }
-    .triBox.clickable{ cursor:pointer; }
-    .triBox.disabled{ opacity:.55; cursor:default; }
-    .triBox.empty{
+    .mark.clickable{ cursor:pointer; }
+    .mark.disabled{ opacity:.55; cursor:default; }
+
+    .mark.empty{
       background: transparent;
-      color: transparent; /* symbol hidden */
+      color: transparent;
     }
-    .triBox.check{
-      border-color: rgba(57,217,138,.55);
-      background: rgba(57,217,138,.10);
-      color: rgba(57,217,138,.95);
+    .mark.full{
+      background: rgba(57,217,138,.95);
+      border-color: rgba(57,217,138,.65);
+      color: rgba(255,255,255,.98);
+      text-shadow: 0 1px 0 rgba(0,0,0,.25);
     }
-    .triBox.checkGrad{
-      border-color: rgba(122,162,255,.55);
+    .mark.partial{
+      background: rgba(255,204,102,.95);
+      border-color: rgba(255,204,102,.65);
       color: rgba(7,10,20,.92);
+      text-shadow: none;
     }
-    .triBox.cross{
-      border-color: rgba(255,107,107,.55);
-      background: rgba(255,107,107,.16);
-      color: rgba(255,107,107,.95);
+    .mark.zero{
+      background: rgba(255,107,107,.95);
+      border-color: rgba(255,107,107,.65);
+      color: rgba(255,255,255,.98);
+      text-shadow: 0 1px 0 rgba(0,0,0,.25);
     }
   </style>
 </head>
@@ -1015,9 +1020,7 @@
       }
     }
     function saveCompareSelected(){
-      try{
-        localStorage.setItem(LS_COMPARE_KEY, JSON.stringify(Array.from(compareSelected)));
-      }catch{}
+      try{ localStorage.setItem(LS_COMPARE_KEY, JSON.stringify(Array.from(compareSelected))); }catch{}
     }
 
     function migrateFromOlder(st){
@@ -1037,7 +1040,6 @@
       if(typeof st.selectedDate !== "string") st.selectedDate = todayISO();
       if(!st.dayData || typeof st.dayData !== "object") st.dayData = {};
 
-      // migrate check-states: boolean -> 1/0
       for(const iso of Object.keys(st.dayData)){
         const day = st.dayData[iso];
         if(!day || typeof day !== "object") continue;
@@ -1079,7 +1081,6 @@
         if(res.error) throw res.error;
         data = res.data;
       }
-
       return data;
     }
 
@@ -1088,12 +1089,12 @@
      **********************/
     let currentUser = null;
     let profileRow = null;
-    let state = null;           // self state
-    let viewingUserId = null;
+    let state = null;           // self state (always)
+    let viewingUserId = null;   // current inspected user id or self id
     let viewingName = null;
 
-    let inspected = null;
-    let inspectedState = null;
+    let inspected = null;       // { user_id, display_name }
+    let inspectedState = null;  // friend state
 
     function uiState(){ return inspectedState || state; }
     function uiIsViewOnly(){ return !!inspected || (viewingUserId !== currentUser?.id); }
@@ -1102,10 +1103,10 @@
     let compareSelected = loadCompareSelected();
     window.compareMeta = [];
 
-    // cache states fetched for compare (for weekly stats)
-    const compareStateCache = new Map(); // user_id -> migrated state (viewOnly)
-    const compareLabelCache = new Map(); // user_id -> label (display_name/email)
-    const compareColorCache = new Map(); // user_id -> color string
+    // state cache for weekly stats / compare rendering
+    const compareStateCache = new Map(); // user_id -> state
+    const compareLabelCache = new Map(); // user_id -> label
+    const compareColorCache = new Map(); // user_id -> color
 
     // Save (debounced)
     let saveTimer = null;
@@ -1144,7 +1145,6 @@
         .eq("user_id", currentUser.id);
 
       saveInFlight = false;
-
       if(error) console.error("Save error:", error);
       if(saveQueued) await flushSaveState();
     }
@@ -1742,21 +1742,6 @@
       day.checks[habitId] = (v === 1 || v === -1) ? v : 0;
     }
 
-    function getHabitDoneForDayIn(st, habit, iso){
-      if(habit.type === "numeric"){
-        const goal = Number(habit.goal);
-        if(!Number.isFinite(goal)) return false;
-
-        const v = getNumericEntryIn(st, iso, habit.id).value;
-        if(v == null || Number.isNaN(v)) return false;
-
-        const dir = habit.dir === "MAX" ? "MAX" : "MIN";
-        return (dir === "MIN") ? (v >= goal) : (v <= goal);
-      }
-
-      return getCheckStateIn(st, iso, habit.id) === 1;
-    }
-
     function numericCreditIn(st, habit, iso){
       const w = Number(habit.weight||0);
       if(w <= 0) return 0;
@@ -1800,6 +1785,20 @@
       return round2((earnedWeightIn(st, iso)/tw)*100);
     }
 
+    function getHabitDoneForDayIn(st, habit, iso){
+      if(habit.type === "numeric"){
+        const goal = Number(habit.goal);
+        if(!Number.isFinite(goal)) return false;
+
+        const v = getNumericEntryIn(st, iso, habit.id).value;
+        if(v == null || Number.isNaN(v)) return false;
+
+        const dir = habit.dir === "MAX" ? "MAX" : "MIN";
+        return (dir === "MIN") ? (v >= goal) : (v <= goal);
+      }
+      return getCheckStateIn(st, iso, habit.id) === 1;
+    }
+
     /****************
      * APP LOGIC     *
      ****************/
@@ -1822,6 +1821,8 @@
           if(min != null) v = Math.max(min, v);
           if(max != null) v = Math.min(max, v);
           entry.value = v;
+        } else {
+          entry.value = null;
         }
       }
 
@@ -1932,9 +1933,9 @@
           onClick: async (evt) => {
             if(!scoreChart) return;
 
-            const baseSt = uiState();
-            const monthISO = baseSt?.selectedDate || todayISO();
-            const series = buildMonthSeriesFor(baseSt, monthISO);
+            // labels follow CURRENTLY VIEWED month (friend or self), but datasets are always self+inspected+selected
+            const monthBase = uiState();
+            const series = buildMonthSeriesFor(monthBase, monthBase?.selectedDate || todayISO());
 
             const pts = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:true }, true);
             let idx, dsIdx;
@@ -1949,8 +1950,9 @@
             }
 
             const iso2 = toISODate(new Date(series.year, series.monthIndex0, idx+1));
-            const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"base" };
+            const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"self" };
 
+            // click on a friend's dataset -> inspect that friend (but keep both graphs: self + inspected + selections)
             if(meta.kind === "friend" && meta.user_id){
               try{
                 const { data, error } = await sb
@@ -1980,6 +1982,7 @@
               return;
             }
 
+            // click on self dataset -> just change day in current view mode
             setSelectedDate(iso2, { viewOnly: uiIsViewOnly() });
           }
         }
@@ -2004,37 +2007,56 @@
       repaintCharts();
     }
 
+    // IMPORTANT CHANGE:
+    // Score chart datasets are always: self + (if inspected) inspected + compareSelected (excluding duplicates).
     async function refreshCompareDatasets(){
-      if(!scoreChart) return;
+      if(!scoreChart || !state || !currentUser) return;
 
-      const baseSt = uiState();
-      if(!baseSt) return;
+      compareStateCache.clear();
+      compareLabelCache.clear();
+      compareColorCache.clear();
 
-      const monthISO = baseSt.selectedDate;
-      const baseSeries = buildMonthSeriesFor(baseSt, monthISO);
+      const monthISO = uiState()?.selectedDate || state.selectedDate;
+
+      // labels follow currently viewed month
+      const baseSeriesForLabels = buildMonthSeriesFor(uiState(), monthISO);
 
       const datasets = [];
       window.compareMeta = [];
 
-      // base dataset color fixed (like original self)
-      const baseColor = "rgba(122,162,255,.95)";
-      const baseLabel = (viewingName || profileRow?.display_name || currentUser?.email || "Profil");
+      // 0) SELF always
+      const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
+      const selfColor = "rgba(122,162,255,.95)";
+      const selfSeries = buildMonthSeriesFor(state, monthISO);
 
-      datasets.push(baseScoreDataset(baseLabel, baseSeries.scores, baseColor));
-      window.compareMeta.push({ kind:"base", user_id: viewingUserId, display_name: baseLabel });
+      datasets.push(baseScoreDataset(selfLabel, selfSeries.scores, selfColor));
+      window.compareMeta.push({ kind:"self", user_id: currentUser.id, display_name: selfLabel });
+      compareStateCache.set(currentUser.id, state);
+      compareLabelCache.set(currentUser.id, selfLabel);
+      compareColorCache.set(currentUser.id, selfColor);
 
-      compareLabelCache.set(viewingUserId, baseLabel);
-      compareColorCache.set(viewingUserId, baseColor);
+      // 1) INSPECTED always shown too (if exists) => requirement: "immer unsere BEIDEN Graphen"
+      let colorIdx = 0;
+      if(inspected && inspectedState){
+        colorIdx += 1;
+        const col = rgbaFromIndex(colorIdx);
+        const label = inspected.display_name || "Freund";
+        const s = buildMonthSeriesFor(inspectedState, monthISO);
 
-      // cache base state (copy ref ok, we never mutate in weekly)
-      compareStateCache.set(viewingUserId, baseSt);
+        datasets.push(baseScoreDataset(label, s.scores, col));
+        window.compareMeta.push({ kind:"friend", user_id: inspected.user_id, display_name: label });
 
+        compareStateCache.set(inspected.user_id, inspectedState);
+        compareLabelCache.set(inspected.user_id, label);
+        compareColorCache.set(inspected.user_id, col);
+      }
+
+      // 2) compareSelected friends
       if(compareSelected?.size > 0){
         const selectedIds = Array.from(compareSelected);
-        let colorIdx = 0;
-
         for(const uid of selectedIds){
-          if(uid === viewingUserId) continue;
+          if(uid === currentUser.id) continue;
+          if(inspected && uid === inspected.user_id) continue;
 
           try{
             const { data, error } = await sb
@@ -2046,19 +2068,18 @@
             if(error) throw error;
             if(!data?.state) continue;
 
-            const st = migrateFromOlder(data.state);
-            st.viewOnly = true;
-
-            const s = buildMonthSeriesFor(st, monthISO);
+            const st2 = migrateFromOlder(data.state);
+            st2.viewOnly = true;
 
             colorIdx += 1;
             const col = rgbaFromIndex(colorIdx);
             const label = data.display_name || (String(uid).slice(0,8) + "…");
+            const s2 = buildMonthSeriesFor(st2, monthISO);
 
-            datasets.push(baseScoreDataset(label, s.scores, col));
+            datasets.push(baseScoreDataset(label, s2.scores, col));
             window.compareMeta.push({ kind:"friend", user_id: uid, display_name: label });
 
-            compareStateCache.set(uid, st);
+            compareStateCache.set(uid, st2);
             compareLabelCache.set(uid, label);
             compareColorCache.set(uid, col);
           }catch(e){
@@ -2067,7 +2088,7 @@
         }
       }
 
-      scoreChart.data.labels = baseSeries.labels;
+      scoreChart.data.labels = baseSeriesForLabels.labels;
       scoreChart.data.datasets = datasets;
       scoreChart.update();
 
@@ -2077,13 +2098,13 @@
     function repaintCharts(){
       if(!scoreChart || !sleepChart) return;
 
-      const st = uiState();
-      if(!st) return;
+      const stView = uiState();
+      if(!stView) return;
 
-      monthLabel1.textContent = monthTitleFromISO(st.selectedDate);
-      monthLabel2.textContent = monthTitleFromISO(st.selectedDate);
+      monthLabel1.textContent = monthTitleFromISO(stView.selectedDate);
+      monthLabel2.textContent = monthTitleFromISO(stView.selectedDate);
 
-      const series = buildMonthSeriesFor(st, st.selectedDate);
+      const series = buildMonthSeriesFor(stView, stView.selectedDate);
 
       sleepChart.data.labels = series.labels;
       sleepChart.data.datasets[0].data = series.sleeps;
@@ -2099,7 +2120,7 @@
     function startOfWeekMonday(iso){
       const d = parseISO(iso);
       const jsDay = d.getDay(); // 0=So..6=Sa
-      const offset = (jsDay === 0) ? 6 : (jsDay - 1); // days since Monday
+      const offset = (jsDay === 0) ? 6 : (jsDay - 1);
       const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset);
       return toISODate(monday);
     }
@@ -2111,21 +2132,22 @@
     function weekdayIndexMon0(iso){
       const d = parseISO(iso);
       const jsDay = d.getDay();
-      return (jsDay === 0) ? 6 : (jsDay - 1); // Mon=0..Sun=6
+      return (jsDay === 0) ? 6 : (jsDay - 1);
     }
     function isSameWeekMonday(aIso, bIso){
       return startOfWeekMonday(aIso) === startOfWeekMonday(bIso);
     }
+
     function buildWeeklyPanel(){
       if(!weeklyAveragesEl || !weeklyWinnersEl) return;
 
       weeklyAveragesEl.innerHTML = "";
       weeklyWinnersEl.innerHTML = "";
 
-      const st = uiState();
-      if(!st) return;
+      const view = uiState();
+      if(!view) return;
 
-      const selISO = st.selectedDate;
+      const selISO = view.selectedDate;
       const today = todayISO();
 
       const weekStart = startOfWeekMonday(selISO);
@@ -2134,31 +2156,27 @@
       const todayIdx = weekdayIndexMon0(today);
 
       const lastDayIdx = (() => {
-        // past week -> full 7 days
         if(!isCurrentWeek){
-          // if week is in the future: show up to 0 (no days)
           const wStartDate = parseISO(weekStart);
           const tStartDate = parseISO(startOfWeekMonday(today));
           if(wStartDate > tStartDate) return -1;
           return 6;
         }
-        // current week
-        const capped = Math.min(selIdx, todayIdx);
-        return capped;
+        return Math.min(selIdx, todayIdx);
       })();
 
-      // represented users = base + selected friends
+      // represented users = datasets in chart
       const users = [];
       if(scoreChart?.data?.datasets?.length){
         for(let i=0;i<scoreChart.data.datasets.length;i++){
-          const meta = window.compareMeta?.[i] || { kind:"base" };
-          const uid = meta.user_id || (i===0 ? viewingUserId : null);
+          const meta = window.compareMeta?.[i];
+          const uid = meta?.user_id;
           if(!uid) continue;
           const label = meta.display_name || scoreChart.data.datasets[i].label || (String(uid).slice(0,8) + "…");
-          const color = scoreChart.data.datasets[i].borderColor || compareColorCache.get(uid) || "rgba(122,162,255,.95)";
-          const stUser = compareStateCache.get(uid);
-          if(!stUser) continue;
-          users.push({ user_id: uid, label, color, state: stUser });
+          const color = scoreChart.data.datasets[i].borderColor || "rgba(122,162,255,.95)";
+          const stU = compareStateCache.get(uid);
+          if(!stU) continue;
+          users.push({ user_id: uid, label, color, state: stU });
         }
       }
 
@@ -2209,9 +2227,6 @@
         const box = document.createElement("div");
         box.className = "winBox";
 
-        const dayISO = addDaysISO(weekStart, di);
-
-        // future day in current week -> blank
         if(isCurrentWeek && di > todayIdx){
           box.style.background = "rgba(10,14,30,.10)";
           box.textContent = "";
@@ -2219,6 +2234,7 @@
           box.style.background = "rgba(10,14,30,.10)";
           box.textContent = "";
         } else {
+          const dayISO = addDaysISO(weekStart, di);
           const scores = users.map(u => ({ u, s: dayScoreIn(u.state, dayISO) }));
           let max = -1;
           for(const x of scores) if(x.s > max) max = x.s;
@@ -2243,7 +2259,6 @@
             box.textContent = "";
           }
 
-          // readable text on bright colors
           box.style.color = "rgba(7,10,20,.92)";
         }
 
@@ -2280,61 +2295,6 @@
       const hue = 0 + 120 * p;
       return `hsl(${hue} 85% 55%)`;
     }
-
-    function gradientForPct(pct){
-      const c1 = ampelColor(pct);
-      return `linear-gradient(135deg, ${c1} 0%, rgba(10,14,30,.22) 100%)`;
-    }
-
-    function triBoxForCheckState(stateVal, { clickable=false, disabled=false } = {}){
-      const b = document.createElement("div");
-      b.className = "triBox";
-      if(clickable && !disabled) b.classList.add("clickable");
-      if(disabled) b.classList.add("disabled");
-
-      if(stateVal === 1){
-        b.classList.add("check");
-        b.textContent = "✓";
-      } else if(stateVal === -1){
-        b.classList.add("cross");
-        b.textContent = "×";
-      } else {
-        b.classList.add("empty");
-        b.textContent = "✓";
-      }
-      return b;
-    }
-
-    function triBoxForNumeric(habit, st, iso){
-      const b = document.createElement("div");
-      b.className = "triBox";
-
-      const entry = getNumericEntryIn(st, iso, habit.id);
-      const hasValue = (entry.value != null && !Number.isNaN(entry.value)) || (typeof entry.text === "string" && entry.text.trim().length > 0);
-
-      if(!hasValue){
-        b.classList.add("empty");
-        b.textContent = "✓";
-        return b;
-      }
-
-      const w = Number(habit.weight||0);
-      const credit = (w > 0) ? numericCreditIn(st, habit, iso) : 0;
-      const frac = (w > 0) ? (credit / w) : 0;
-      const pct = clamp(Math.round(frac * 100), 0, 100);
-
-      if(pct <= 0){
-        b.classList.add("cross");
-        b.textContent = "×";
-        return b;
-      }
-
-      b.classList.add("checkGrad");
-      b.textContent = "✓";
-      b.style.background = gradientForPct(pct);
-      return b;
-    }
-
     function setCircle(percent){
       const pct = clamp(percent, 0, 100);
       const r = 48;
@@ -2360,6 +2320,7 @@
         st.viewOnly = true;
       }
 
+      // lightweight updates (avoid re-rendering the habit inputs on every date change? date change is ok)
       rerenderAll();
     }
 
@@ -2380,7 +2341,6 @@
 
     if(backToMeBtn){
       backToMeBtn.addEventListener("click", async () => {
-        // zurück zu dir (inkl. Editor wieder self)
         try{
           await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
           showApp();
@@ -2396,6 +2356,34 @@
           showApp();
         }
       });
+    }
+
+    function markBoxApplyState(el, stateName){
+      el.classList.remove("empty","full","partial","zero");
+      el.classList.add(stateName);
+      if(stateName === "empty"){
+        el.textContent = "✓";
+      } else if(stateName === "zero"){
+        el.textContent = "×";
+      } else {
+        el.textContent = "✓";
+      }
+    }
+
+    function makeMarkBox({ clickable=false, disabled=false } = {}){
+      const b = document.createElement("div");
+      b.className = "mark empty";
+      b.textContent = "✓";
+      if(clickable && !disabled) b.classList.add("clickable");
+      if(disabled) b.classList.add("disabled");
+      return b;
+    }
+
+    function markStateFromPct(pctRounded){
+      const p = clamp(Number(pctRounded||0), 0, 100);
+      if(p <= 0) return "zero";
+      if(p >= 100) return "full";
+      return "partial";
     }
 
     function renderTop(){
@@ -2508,14 +2496,45 @@
           input.disabled = viewOnly;
           input.style.opacity = viewOnly ? ".55" : "1";
 
-          const box = triBoxForNumeric(h, st, iso);
+          const box = makeMarkBox({ clickable:false, disabled:viewOnly });
 
+          // initial box state (based on habit-internal pct, rounded)
+          const hasValue = (entry.value != null && !Number.isNaN(entry.value)) || (typeof entry.text === "string" && entry.text.trim().length > 0);
+          if(!hasValue){
+            markBoxApplyState(box, "empty");
+          } else {
+            const w = Number(h.weight||0);
+            const credit = (w > 0) ? numericCreditIn(st, h, iso) : 0;
+            const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
+            markBoxApplyState(box, markStateFromPct(pct));
+          }
+
+          // CRITICAL FIX: do NOT rerenderAll() on each keystroke (it recreates input and cuts typing).
           input.addEventListener("input", () => {
             if(viewOnly) return;
 
             const isSleep = (h.id === "sleep");
             setNumericValueForDay(iso, h.id, input.value, isSleep ? { min:0, max:24 } : {});
-            rerenderAll();
+
+            // update box + top + charts without rebuilding habit list
+            const selfHabit = state.habits.find(x => x.id === h.id) || h;
+            const entryNow = getNumericEntryIn(state, iso, selfHabit.id);
+            const hasVal = (entryNow.value != null && !Number.isNaN(entryNow.value)) || (typeof entryNow.text === "string" && entryNow.text.trim().length > 0);
+
+            if(!hasVal){
+              markBoxApplyState(box, "empty");
+            } else {
+              const w = Number(selfHabit.weight||0);
+              const credit = (w > 0) ? numericCreditIn(state, selfHabit, iso) : 0;
+              const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
+              markBoxApplyState(box, markStateFromPct(pct));
+            }
+
+            renderTop();
+            repaintCharts();
+            renderTotals();
+            renderAddHelp();
+            buildWeeklyPanel();
           });
 
           input.addEventListener("blur", () => {
@@ -2529,26 +2548,48 @@
               if(h.id === "sleep") v = clamp(v,0,24);
               entry2.value = v;
               entry2.text = formatDecimalDE(v, 2);
+              input.value = entry2.text; // normalize on blur
             } else {
               entry2.value = null;
               entry2.text = "";
+              input.value = "";
             }
 
             scheduleSaveState();
-            rerenderAll();
+
+            // refresh derived UI (safe on blur)
+            renderHabitList();
+            renderTop();
+            repaintCharts();
+            renderEditor();
+            buildWeeklyPanel();
           });
 
           right.appendChild(input);
           right.appendChild(box);
         } else {
           const stateVal = getCheckStateIn(st, iso, h.id);
-          const box = triBoxForCheckState(stateVal, { clickable: !viewOnly, disabled: viewOnly });
+          const box = makeMarkBox({ clickable: !viewOnly, disabled: viewOnly });
+
+          if(stateVal === 0) markBoxApplyState(box, "empty");
+          else if(stateVal === 1) markBoxApplyState(box, "full");   // 100% => green
+          else if(stateVal === -1) markBoxApplyState(box, "zero");  // 0% => red X
 
           if(!viewOnly){
             box.addEventListener("click", () => {
               const selfHabit = state.habits.find(x => x.id === h.id) || h;
               cycleCheckStateSelf(selfHabit, iso);
-              rerenderAll();
+
+              const now = getCheckStateIn(state, iso, selfHabit.id);
+              if(now === 0) markBoxApplyState(box, "empty");
+              else if(now === 1) markBoxApplyState(box, "full");
+              else markBoxApplyState(box, "zero");
+
+              renderTop();
+              repaintCharts();
+              renderTotals();
+              renderAddHelp();
+              buildWeeklyPanel();
             });
           }
 
@@ -2562,7 +2603,7 @@
     }
 
     function renderEditor(){
-      // Editor zeigt das aktuell angesehene Profil (self oder friend), aber ist im Friend-Modus disabled
+      // Editor shows viewed profile (self or friend), but disabled in friend view
       const st = uiState();
       const viewOnly = uiIsViewOnly();
 
@@ -2597,7 +2638,9 @@
           h.weight = Number.isFinite(n) ? clamp(n, 0, 1000000) : 0;
           scheduleSaveState();
           renderTotals();
-          rerenderAll();
+          renderTop();
+          repaintCharts();
+          buildWeeklyPanel();
         });
 
         let goalCell;
@@ -2619,7 +2662,9 @@
             h.dir = (h.dir === "MAX") ? "MIN" : "MAX";
             scheduleSaveState();
             renderEditor();
-            rerenderAll();
+            renderTop();
+            repaintCharts();
+            buildWeeklyPanel();
           });
 
           const goalInput = document.createElement("input");
@@ -2638,7 +2683,9 @@
             if(Number.isFinite(n)){
               h.goal = n;
               scheduleSaveState();
-              rerenderAll();
+              renderTop();
+              repaintCharts();
+              buildWeeklyPanel();
             }
           });
 
@@ -2648,7 +2695,9 @@
             if(Number.isFinite(n)) goalInput.value = formatDecimalDE(n, 2);
             scheduleSaveState();
             renderEditor();
-            rerenderAll();
+            renderTop();
+            repaintCharts();
+            buildWeeklyPanel();
           });
 
           goalCell.appendChild(opBtn);
@@ -2670,7 +2719,9 @@
             if(Number.isFinite(n)){
               h.halfLife = Math.max(0, n);
               scheduleSaveState();
-              rerenderAll();
+              renderTop();
+              repaintCharts();
+              buildWeeklyPanel();
             }
           });
 
@@ -2680,7 +2731,9 @@
             if(Number.isFinite(n)) halfInput.value = formatDecimalDE(Math.max(0, n), 2);
             scheduleSaveState();
             renderEditor();
-            rerenderAll();
+            renderTop();
+            repaintCharts();
+            buildWeeklyPanel();
           });
 
           halfCell = halfInput;
@@ -2715,7 +2768,10 @@
             }
             scheduleSaveState();
             renderEditor();
-            rerenderAll();
+            renderHabitList();
+            renderTop();
+            repaintCharts();
+            buildWeeklyPanel();
           });
 
           actionEl = xBtn;
@@ -2802,7 +2858,10 @@
 
       scheduleSaveState();
       renderEditor();
-      rerenderAll();
+      renderHabitList();
+      renderTop();
+      repaintCharts();
+      buildWeeklyPanel();
     }
 
     addHabitBtn.addEventListener("click", addHabit);
@@ -2835,7 +2894,10 @@
 
       scheduleSaveState();
       renderEditor();
-      rerenderAll();
+      renderHabitList();
+      renderTop();
+      repaintCharts();
+      buildWeeklyPanel();
     });
 
     resetBtn.addEventListener("click", () => {
@@ -2846,7 +2908,9 @@
       datePicker.value = state.selectedDate;
       repaintCharts();
       renderEditor();
-      rerenderAll();
+      renderHabitList();
+      renderTop();
+      buildWeeklyPanel();
     });
 
     function rerenderAll(){
@@ -2856,6 +2920,7 @@
       renderAddHelp();
       repaintCharts();
       buildWeeklyPanel();
+      renderEditor();
     }
 
     function bootAfterLogin(){
