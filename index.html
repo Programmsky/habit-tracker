@@ -145,9 +145,6 @@
       padding:2px 8px;
     }
     .habitRight{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
-    .check{ display:flex; align-items:center; gap:8px; user-select:none; cursor:pointer; }
-    .check input{ width:18px; height:18px; }
-    .check input[type="checkbox"]{ accent-color: var(--good); }
 
     .numericInput{
       width:120px;
@@ -519,6 +516,40 @@
     }
     .friendLeft{ min-width:0; display:flex; flex-direction:column; gap:4px; }
     .friendName{ font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* TRI-STATE BOX (Haken / Kreuz / leer) */
+    .triBox{
+      width:22px;
+      height:22px;
+      border-radius:6px;
+      border:1px solid rgba(35,48,90,.75);
+      background: rgba(10,14,30,.35);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:900;
+      line-height:1;
+      user-select:none;
+      flex: 0 0 auto;
+      box-shadow: 0 6px 14px rgba(0,0,0,.25);
+    }
+    .triBox.clickable{ cursor:pointer; }
+    .triBox.disabled{ opacity:.55; cursor:default; }
+    .triBox.empty{
+      background: rgba(10,14,30,.25);
+      color: transparent;
+      box-shadow:none;
+    }
+    .triBox.check{
+      color: rgba(7,10,20,.92);
+      text-shadow: 0 1px 0 rgba(255,255,255,.18);
+    }
+    .triBox.cross{
+      background: rgba(255,107,107,.85);
+      border-color: rgba(255,107,107,.65);
+      color: rgba(255,255,255,.92);
+      text-shadow: 0 1px 0 rgba(0,0,0,.22);
+    }
   </style>
 </head>
 <body>
@@ -751,7 +782,7 @@
 
     <!-- FRIENDS (BOTTOM + COLLAPSIBLE) -->
     <section class="editorSection">
-      <details id="friendsDetails" open>
+      <details id="friendsDetails">
         <summary>
           <div class="sumLeft">
             <div class="sumTitle">Freunde & Anfragen</div>
@@ -878,6 +909,27 @@
       return trimmed.replace(".", ",");
     }
 
+    /**********************
+     * PERSIST: COMPARE    *
+     **********************/
+    const LS_COMPARE_KEY = "ht_compare_selected_v1";
+    function loadCompareSelected(){
+      try{
+        const raw = localStorage.getItem(LS_COMPARE_KEY);
+        if(!raw) return new Set();
+        const arr = JSON.parse(raw);
+        if(!Array.isArray(arr)) return new Set();
+        return new Set(arr.filter(x => typeof x === "string" && x.length));
+      }catch{
+        return new Set();
+      }
+    }
+    function saveCompareSelected(){
+      try{
+        localStorage.setItem(LS_COMPARE_KEY, JSON.stringify(Array.from(compareSelected)));
+      }catch{}
+    }
+
     function migrateFromOlder(st){
       if(!st || typeof st !== "object") return defaultState();
       if(!st.habits?.some(h => h.id === "sleep")){
@@ -894,6 +946,21 @@
       });
       if(typeof st.selectedDate !== "string") st.selectedDate = todayISO();
       if(!st.dayData || typeof st.dayData !== "object") st.dayData = {};
+
+      // migrate check-states: boolean -> 1/0
+      for(const iso of Object.keys(st.dayData)){
+        const day = st.dayData[iso];
+        if(!day || typeof day !== "object") continue;
+        if(!day.checks) day.checks = {};
+        for(const k of Object.keys(day.checks)){
+          const v = day.checks[k];
+          if(v === true) day.checks[k] = 1;
+          else if(v === false) day.checks[k] = 0;
+          else if(v !== 1 && v !== -1 && v !== 0) day.checks[k] = 0;
+        }
+        if(!day.values || typeof day.values !== "object") day.values = {};
+      }
+
       st.viewOnly = false;
       return st;
     }
@@ -944,7 +1011,7 @@
 
     // Friends cache for compare menu
     let friendsCache = []; // [{ user_id, display_name }]
-    let compareSelected = new Set(); // user_ids
+    let compareSelected = loadCompareSelected(); // user_ids (persistiert)
     window.compareMeta = []; // aligned to datasets: [{ kind:"base"|"friend", user_id?, display_name? }]
 
     // Save (debounced)
@@ -1189,7 +1256,7 @@
       inspected = null;
       inspectedState = null;
       friendsCache = [];
-      compareSelected = new Set();
+      // compareSelected bleibt absichtlich (persistiert)
       window.compareMeta = [];
       destroyCharts();
       showAuth();
@@ -1246,8 +1313,11 @@
         left.appendChild(meta);
 
         const chkWrap = document.createElement("label");
-        chkWrap.className = "check";
+        chkWrap.style.display = "inline-flex";
+        chkWrap.style.alignItems = "center";
+        chkWrap.style.gap = "8px";
         chkWrap.style.cursor = "pointer";
+        chkWrap.style.userSelect = "none";
 
         const cb = document.createElement("input");
         cb.type = "checkbox";
@@ -1255,11 +1325,13 @@
         cb.addEventListener("change", async () => {
           if(cb.checked) compareSelected.add(f.user_id);
           else compareSelected.delete(f.user_id);
+          saveCompareSelected();
           await refreshCompareDatasets();
         });
 
         const t = document.createElement("span");
         t.textContent = "anzeigen";
+        t.style.color = "var(--text)";
 
         chkWrap.appendChild(cb);
         chkWrap.appendChild(t);
@@ -1565,9 +1637,21 @@
       return e;
     }
 
-    function getHabitDoneForDayIn(st, habit, iso){
+    function getCheckStateIn(st, iso, habitId){
       const day = ensureDayIn(st, iso);
+      const v = day.checks[habitId];
+      if(v === 1 || v === -1 || v === 0) return v;
+      if(v === true) return 1;
+      if(v === false) return 0;
+      return 0;
+    }
 
+    function setCheckStateIn(st, iso, habitId, v){
+      const day = ensureDayIn(st, iso);
+      day.checks[habitId] = (v === 1 || v === -1) ? v : 0;
+    }
+
+    function getHabitDoneForDayIn(st, habit, iso){
       if(habit.type === "numeric"){
         const goal = Number(habit.goal);
         if(!Number.isFinite(goal)) return false;
@@ -1579,7 +1663,7 @@
         return (dir === "MIN") ? (v >= goal) : (v <= goal);
       }
 
-      return !!day.checks[habit.id];
+      return getCheckStateIn(st, iso, habit.id) === 1;
     }
 
     function numericCreditIn(st, habit, iso){
@@ -1614,7 +1698,7 @@
       let w=0;
       for(const h of st.habits){
         if(h.type === "numeric") w += numericCreditIn(st, h, iso);
-        else if(getHabitDoneForDayIn(st, h, iso)) w += Number(h.weight||0);
+        else if(getCheckStateIn(st, iso, h.id) === 1) w += Number(h.weight||0);
       }
       return w;
     }
@@ -1653,11 +1737,12 @@
       scheduleSaveState();
     }
 
-    function setHabitDoneForDay(habit, iso, done){
+    function cycleCheckStateSelf(habit, iso){
       if(uiIsViewOnly()) return;
       if(habit.type !== "check") return;
-      const day = ensureDaySelf(iso);
-      day.checks[habit.id] = !!done;
+      const cur = getCheckStateIn(state, iso, habit.id);
+      const next = (cur === 0) ? 1 : (cur === 1) ? -1 : 0;
+      setCheckStateIn(state, iso, habit.id, next);
       scheduleSaveState();
     }
 
@@ -1713,12 +1798,12 @@
 
     function rgbaFromIndex(i){
       const palette = [
-        "rgba(57,217,138,.95)",   // grün
-        "rgba(255,204,102,.95)",  // gelb
-        "rgba(255,107,107,.95)",  // rot
-        "rgba(196,140,255,.95)",  // violett
-        "rgba(80,200,255,.95)",   // cyan
-        "rgba(255,140,200,.95)"   // pink
+        "rgba(57,217,138,.95)",
+        "rgba(255,204,102,.95)",
+        "rgba(255,107,107,.95)",
+        "rgba(196,140,255,.95)",
+        "rgba(80,200,255,.95)",
+        "rgba(255,140,200,.95)"
       ];
       return palette[i % palette.length];
     }
@@ -1757,7 +1842,6 @@
           onClick: async (evt) => {
             if(!scoreChart) return;
 
-            // Monat/Labels immer vom aktuell angesehenen Profil (self oder besucht)
             const baseSt = uiState();
             const monthISO = baseSt?.selectedDate || todayISO();
             const series = buildMonthSeriesFor(baseSt, monthISO);
@@ -1775,10 +1859,8 @@
             }
 
             const iso2 = toISODate(new Date(series.year, series.monthIndex0, idx+1));
-
             const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"base" };
 
-            // Freund-Linie geklickt -> inspect (ohne Vergleich zu verlieren)
             if(meta.kind === "friend" && meta.user_id){
               try{
                 const { data, error } = await sb
@@ -1808,7 +1890,6 @@
               return;
             }
 
-            // Basis-Linie geklickt -> nur Tag wechseln (im aktuell angesehenen Profil)
             setSelectedDate(iso2, { viewOnly: uiIsViewOnly() });
           }
         }
@@ -1836,7 +1917,6 @@
     async function refreshCompareDatasets(){
       if(!scoreChart) return;
 
-      // Basis = aktuell angesehenes Profil (self oder besucht)
       const baseSt = uiState();
       if(!baseSt) return;
 
@@ -1850,13 +1930,11 @@
       datasets.push(baseScoreDataset(baseLabel, baseSeries.scores, "rgba(122,162,255,.95)"));
       window.compareMeta.push({ kind:"base", user_id: viewingUserId, display_name: baseLabel });
 
-      // Zusätzliche Freunde als Linien
       if(compareSelected?.size > 0){
         const selectedIds = Array.from(compareSelected);
         let colorIdx = 0;
 
         for(const uid of selectedIds){
-          // nicht doppelt die Basis anzeigen
           if(uid === viewingUserId) continue;
 
           try{
@@ -1897,11 +1975,9 @@
       const st = uiState();
       if(!st) return;
 
-      // Beide Monatslabels folgen dem aktuell angesehenen Profil
       monthLabel1.textContent = monthTitleFromISO(st.selectedDate);
       monthLabel2.textContent = monthTitleFromISO(st.selectedDate);
 
-      // Sleep chart zeigt den gerade angesehenen State (self oder inspected)
       const series = buildMonthSeriesFor(st, st.selectedDate);
 
       sleepChart.data.labels = series.labels;
@@ -1909,7 +1985,6 @@
       sleepChart.data.datasets[1].data = series.goals;
       sleepChart.update();
 
-      // Score chart soll ebenfalls dem angesehenen Profil folgen
       refreshCompareDatasets();
     }
 
@@ -1940,6 +2015,64 @@
       const hue = 0 + 120 * p;
       return `hsl(${hue} 85% 55%)`;
     }
+
+    function gradientForPct(pct){
+      const c1 = ampelColor(pct);
+      return `linear-gradient(135deg, ${c1} 0%, rgba(0,0,0,.22) 100%)`;
+    }
+
+    function triBoxForCheckState(stateVal, { clickable=false, disabled=false } = {}){
+      const b = document.createElement("div");
+      b.className = "triBox";
+      if(clickable && !disabled) b.classList.add("clickable");
+      if(disabled) b.classList.add("disabled");
+
+      if(stateVal === 1){
+        b.classList.add("check");
+        b.textContent = "✓";
+        b.style.background = gradientForPct(100);
+        b.style.borderColor = "rgba(57,217,138,.55)";
+      } else if(stateVal === -1){
+        b.classList.add("cross");
+        b.textContent = "×";
+      } else {
+        b.classList.add("empty");
+        b.textContent = "✓";
+      }
+      return b;
+    }
+
+    function triBoxForNumeric(habit, st, iso){
+      const b = document.createElement("div");
+      b.className = "triBox";
+
+      const entry = getNumericEntryIn(st, iso, habit.id);
+      const hasValue = (entry.value != null && !Number.isNaN(entry.value)) || (typeof entry.text === "string" && entry.text.trim().length > 0);
+
+      if(!hasValue){
+        b.classList.add("empty");
+        b.textContent = "✓";
+        return b;
+      }
+
+      const w = Number(habit.weight||0);
+      const credit = (w > 0) ? numericCreditIn(st, habit, iso) : 0;
+      const frac = (w > 0) ? (credit / w) : 0;
+      const pct = clamp(Math.round(frac * 100), 0, 100);
+
+      if(pct <= 0){
+        b.classList.add("cross");
+        b.textContent = "×";
+        return b;
+      }
+
+      b.classList.add("check");
+      b.textContent = "✓";
+      b.style.background = gradientForPct(pct);
+      b.style.borderColor = "rgba(122,162,255,.45)";
+      return b;
+    }
+
     function setCircle(percent){
       const pct = clamp(percent, 0, 100);
       const r = 48;
@@ -1958,7 +2091,6 @@
 
       datePicker.value = iso;
 
-      // Self bleibt editierbar, friend immer viewOnly
       if(st === state){
         state.viewOnly = !!viewOnly || (viewingUserId !== currentUser?.id);
         if(!state.viewOnly) scheduleSaveState();
@@ -1972,12 +2104,10 @@
     datePicker.addEventListener("change", () => {
       const iso = datePicker.value;
       if(!iso) return;
-      // Wenn du gerade inspected bist, soll der Datepicker trotzdem den inspected Tag setzen (Ansicht)
       setSelectedDate(iso, { viewOnly: uiIsViewOnly() });
     });
 
     goTodayBtn.addEventListener("click", () => {
-      // Heute: wenn inspected -> heute im inspected (Ansicht); wenn self -> heute (edit)
       setSelectedDate(todayISO(), { viewOnly: uiIsViewOnly() });
     });
 
@@ -1988,17 +2118,22 @@
 
     if(backToMeBtn){
       backToMeBtn.addEventListener("click", async () => {
-        // zurück zu dir + heute
-        inspected = null;
-        inspectedState = null;
-        viewingUserId = currentUser?.id;
-        viewingName = profileRow?.display_name || currentUser?.email || "—";
-
-        updateBackButton();
-        setSelectedDate(todayISO(), { viewOnly:false });
-
-        await refreshCompareDatasets();
-        showApp();
+        // Hard reset auf Self-Ansicht (verhindert "Editor zeigt noch Freund")
+        try{
+          await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
+          showApp();
+          await refreshCompareDatasets();
+        }catch(e){
+          // Fallback: nur local reset
+          inspected = null;
+          inspectedState = null;
+          viewingUserId = currentUser?.id;
+          viewingName = profileRow?.display_name || currentUser?.email || "—";
+          updateBackButton();
+          setSelectedDate(todayISO(), { viewOnly:false });
+          await refreshCompareDatasets();
+          showApp();
+        }
       });
     }
 
@@ -2019,7 +2154,6 @@
       scoreLabel.textContent = `${Math.round(score)}%`;
       setCircle(score);
 
-      // doneCount + habitCount aus aktuellem st
       let c=0;
       for(const h of st.habits) if(getHabitDoneForDayIn(st, h, iso)) c++;
       doneCountEl.textContent = String(c);
@@ -2113,37 +2247,14 @@
           input.disabled = viewOnly;
           input.style.opacity = viewOnly ? ".55" : "1";
 
-          const label = document.createElement("label");
-          label.className = "check";
-          label.style.cursor = "default";
-
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = getHabitDoneForDayIn(st, h, iso);
-          cb.addEventListener("click", (e) => e.preventDefault());
-          cb.addEventListener("keydown", (e) => e.preventDefault());
-          cb.style.pointerEvents = "none";
-          cb.tabIndex = -1;
-
-          const txt = document.createElement("span");
-          txt.textContent = cb.checked ? "Erledigt" : "Offen";
-
-          label.appendChild(cb);
-          label.appendChild(txt);
+          const box = triBoxForNumeric(h, st, iso);
 
           input.addEventListener("input", () => {
             if(viewOnly) return;
 
             const isSleep = (h.id === "sleep");
             setNumericValueForDay(iso, h.id, input.value, isSleep ? { min:0, max:24 } : {});
-            renderTop();
-            repaintCharts();
-            renderTotals();
-            renderAddHelp();
-
-            const doneNow = getHabitDoneForDayIn(st, h, iso);
-            txt.textContent = doneNow ? "Erledigt" : "Offen";
-            cb.checked = doneNow;
+            rerenderAll();
           });
 
           input.addEventListener("blur", () => {
@@ -2167,37 +2278,20 @@
           });
 
           right.appendChild(input);
-          right.appendChild(label);
+          right.appendChild(box);
         } else {
-          const label = document.createElement("label");
-          label.className = "check";
+          const stateVal = getCheckStateIn(st, iso, h.id);
+          const box = triBoxForCheckState(stateVal, { clickable: !viewOnly, disabled: viewOnly });
 
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = getHabitDoneForDayIn(st, h, iso);
-
-          const txt = document.createElement("span");
-          txt.textContent = cb.checked ? "Erledigt" : "Offen";
-
-          if(viewOnly){
-            cb.addEventListener("click", (e) => e.preventDefault());
-            cb.addEventListener("keydown", (e) => e.preventDefault());
-            cb.style.pointerEvents = "none";
-            cb.tabIndex = -1;
-            label.style.cursor = "default";
-          } else {
-            cb.addEventListener("change", () => {
-              // Änderungen immer in self-state
+          if(!viewOnly){
+            box.addEventListener("click", () => {
               const selfHabit = state.habits.find(x => x.id === h.id) || h;
-              setHabitDoneForDay(selfHabit, iso, cb.checked);
-              txt.textContent = cb.checked ? "Erledigt" : "Offen";
+              cycleCheckStateSelf(selfHabit, iso);
               rerenderAll();
             });
           }
 
-          label.appendChild(cb);
-          label.appendChild(txt);
-          right.appendChild(label);
+          right.appendChild(box);
         }
 
         row.appendChild(left);
@@ -2207,7 +2301,8 @@
     }
 
     function renderEditor(){
-      const st = uiState();
+      // Editor immer aus SELF-State bauen (auch wenn Freund angesehen wird)
+      const st = state;
       const viewOnly = uiIsViewOnly();
 
       weightsList.innerHTML = "";
@@ -2351,7 +2446,6 @@
           xBtn.addEventListener("click", () => {
             if(viewOnly) return;
 
-            // Änderungen nur im self-state
             state.habits = state.habits.filter(x => x.id !== h.id);
             for(const dayIso of Object.keys(state.dayData)){
               const day = state.dayData[dayIso];
@@ -2381,8 +2475,7 @@
     }
 
     function renderTotals(){
-      const st = uiState();
-      const sum = totalWeightIn(st);
+      const sum = totalWeightIn(state);
       totalWeightKpi.textContent = String(round2(sum));
       sumStatus.textContent = `Summe: ${round2(sum)}%`;
 
@@ -2402,8 +2495,7 @@
     }
 
     function renderAddHelp(){
-      const st = uiState();
-      const sum = totalWeightIn(st);
+      const sum = totalWeightIn(state);
       addHelp.textContent =
         `Gewichtsumme aktuell: ${round2(sum)}%. ` +
         (Math.abs(sum-100) < 1e-6 ? `OK.` : `Passe Gewichte an oder nutze "Normieren".`);
