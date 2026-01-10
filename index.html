@@ -79,7 +79,7 @@
 
     .charts{
       max-width:1200px;
-      margin: 16px auto 16px auto;
+      margin: 16px auto 12px auto;
       padding: 0 18px;
       display:grid;
       grid-template-columns: 1fr 1fr;
@@ -91,6 +91,78 @@
     canvas{ width:100% !important; height:280px !important; }
     .clickHint{ margin-top:8px; font-size:12px; color:var(--muted); }
     .tiny{ font-size:11px; color:var(--muted); }
+
+    /* Weekly panel under charts */
+    .weeklyPanel{
+      max-width:1200px;
+      margin: 0 auto 14px auto;
+      padding: 0 18px;
+    }
+    .weeklyBody{
+      padding: 10px 14px 12px 14px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .weeklyRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .weeklyRow .lbl{
+      color:var(--muted);
+      font-size:12px;
+      min-width: 90px;
+    }
+    .avgChip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(35,48,90,.65);
+      background: rgba(15,23,48,.55);
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .dot{
+      width:10px;height:10px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.18);
+      flex:0 0 auto;
+    }
+    .winsRow{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .dowItem{
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .dowLabel{
+      color:var(--muted);
+      font-size:12px;
+      width:24px;
+      text-align:right;
+    }
+    .winBox{
+      width:18px;
+      height:18px;
+      border-radius:5px;
+      border:1px solid rgba(35,48,90,.75);
+      background: rgba(10,14,30,.25);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:10px;
+      font-weight:800;
+      line-height:1;
+      user-select:none;
+      color: rgba(7,10,20,.92);
+    }
 
     main{
       max-width: 1200px;
@@ -517,13 +589,13 @@
     .friendLeft{ min-width:0; display:flex; flex-direction:column; gap:4px; }
     .friendName{ font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-    /* TRI-STATE BOX (Haken / Kreuz / leer) */
+    /* TRI-STATE BOX (flat, closer to original look) */
     .triBox{
-      width:22px;
-      height:22px;
-      border-radius:6px;
+      width:18px;
+      height:18px;
+      border-radius:5px;
       border:1px solid rgba(35,48,90,.75);
-      background: rgba(10,14,30,.35);
+      background: rgba(10,14,30,.18);
       display:inline-flex;
       align-items:center;
       justify-content:center;
@@ -531,24 +603,27 @@
       line-height:1;
       user-select:none;
       flex: 0 0 auto;
-      box-shadow: 0 6px 14px rgba(0,0,0,.25);
+      font-size:12px;
     }
     .triBox.clickable{ cursor:pointer; }
     .triBox.disabled{ opacity:.55; cursor:default; }
     .triBox.empty{
-      background: rgba(10,14,30,.25);
-      color: transparent;
-      box-shadow:none;
+      background: transparent;
+      color: transparent; /* symbol hidden */
     }
     .triBox.check{
+      border-color: rgba(57,217,138,.55);
+      background: rgba(57,217,138,.10);
+      color: rgba(57,217,138,.95);
+    }
+    .triBox.checkGrad{
+      border-color: rgba(122,162,255,.55);
       color: rgba(7,10,20,.92);
-      text-shadow: 0 1px 0 rgba(255,255,255,.18);
     }
     .triBox.cross{
-      background: rgba(255,107,107,.85);
-      border-color: rgba(255,107,107,.65);
-      color: rgba(255,255,255,.92);
-      text-shadow: 0 1px 0 rgba(0,0,0,.22);
+      border-color: rgba(255,107,107,.55);
+      background: rgba(255,107,107,.16);
+      color: rgba(255,107,107,.95);
     }
   </style>
 </head>
@@ -616,7 +691,6 @@
         <div class="cardHeader">
           <h2>Monat: Tages-Score (0–100%)</h2>
 
-          <!-- Vergleich + Zurück -->
           <div class="compareWrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
             <button id="backToMeBtn" class="btn ghost hidden" type="button">← Zurück</button>
             <button id="compareBtn" class="btn ghost" type="button">Vergleichen ▾</button>
@@ -651,6 +725,22 @@
         <div class="cardBody">
           <canvas id="sleepChart"></canvas>
           <div class="tiny">Rote Linie = Schlafziel.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WEEKLY SUMMARY (2 lines) -->
+    <section class="weeklyPanel">
+      <div class="card">
+        <div class="weeklyBody">
+          <div class="weeklyRow">
+            <div class="lbl">Ø Woche:</div>
+            <div id="weeklyAverages" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+          </div>
+          <div class="weeklyRow" style="align-items:flex-start;">
+            <div class="lbl">Best-of:</div>
+            <div id="weeklyWinners" class="winsRow"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -996,23 +1086,26 @@
     /**********************
      * GLOBAL SESSION      *
      **********************/
-    let currentUser = null;     // auth user object
-    let profileRow = null;      // own profile row
-    let state = null;           // DEIN eigener State (bleibt immer dein State)
-    let viewingUserId = null;   // UI-Label (kann Freund sein)
+    let currentUser = null;
+    let profileRow = null;
+    let state = null;           // self state
+    let viewingUserId = null;
     let viewingName = null;
 
-    // Freund temporär ansehen, ohne Vergleich zu verlieren
-    let inspected = null;       // { user_id, display_name }
-    let inspectedState = null;  // migrated friend state
+    let inspected = null;
+    let inspectedState = null;
 
     function uiState(){ return inspectedState || state; }
     function uiIsViewOnly(){ return !!inspected || (viewingUserId !== currentUser?.id); }
 
-    // Friends cache for compare menu
-    let friendsCache = []; // [{ user_id, display_name }]
-    let compareSelected = loadCompareSelected(); // user_ids (persistiert)
-    window.compareMeta = []; // aligned to datasets: [{ kind:"base"|"friend", user_id?, display_name? }]
+    let friendsCache = [];
+    let compareSelected = loadCompareSelected();
+    window.compareMeta = [];
+
+    // cache states fetched for compare (for weekly stats)
+    const compareStateCache = new Map(); // user_id -> migrated state (viewOnly)
+    const compareLabelCache = new Map(); // user_id -> label (display_name/email)
+    const compareColorCache = new Map(); // user_id -> color string
 
     // Save (debounced)
     let saveTimer = null;
@@ -1052,12 +1145,8 @@
 
       saveInFlight = false;
 
-      if(error){
-        console.error("Save error:", error);
-      }
-      if(saveQueued){
-        await flushSaveState();
-      }
+      if(error) console.error("Save error:", error);
+      if(saveQueued) await flushSaveState();
     }
 
     /****************
@@ -1106,6 +1195,9 @@
 
     const logoutBtn = document.getElementById("logoutBtn");
     const userPill = document.getElementById("userPill");
+
+    const weeklyAveragesEl = document.getElementById("weeklyAverages");
+    const weeklyWinnersEl = document.getElementById("weeklyWinners");
 
     // AUTH UI
     const authOverlay = document.getElementById("authOverlay");
@@ -1231,7 +1323,6 @@
       currentUser = user;
       profileRow = await getOrCreateProfile(user);
 
-      // Self laden
       await loadProfileForView(user.id, profileRow.display_name || user.email || "—", { viewOnly:false });
 
       if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID) showAdmin();
@@ -1256,8 +1347,10 @@
       inspected = null;
       inspectedState = null;
       friendsCache = [];
-      // compareSelected bleibt absichtlich (persistiert)
       window.compareMeta = [];
+      compareStateCache.clear();
+      compareLabelCache.clear();
+      compareColorCache.clear();
       destroyCharts();
       showAuth();
     }
@@ -1584,7 +1677,6 @@
       if(error) throw error;
       if(!data) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
 
-      // SELF laden -> echter state, inspection beenden
       if(!viewOnly){
         viewingUserId = currentUser.id;
         viewingName = profileRow?.display_name || currentUser?.email || "—";
@@ -1601,7 +1693,6 @@
         return;
       }
 
-      // FRIEND inspecten -> state NICHT ersetzen
       inspected = {
         user_id: data.user_id,
         display_name: name || data.display_name || "Freund"
@@ -1716,7 +1807,7 @@
     function getNumericEntrySelf(iso, habitId){ return getNumericEntryIn(state, iso, habitId); }
 
     function setNumericValueForDay(iso, habitId, rawValue, { min=null, max=null } = {}){
-      if(uiIsViewOnly()) return; // nur self editierbar
+      if(uiIsViewOnly()) return;
       const entry = getNumericEntrySelf(iso, habitId);
 
       const s = String(rawValue ?? "").trim();
@@ -1808,7 +1899,7 @@
       return palette[i % palette.length];
     }
 
-    function baseScoreDataset(label, data, color, { dashed=false } = {}){
+    function baseScoreDataset(label, data, color){
       return {
         label,
         data,
@@ -1820,7 +1911,6 @@
         borderColor: color,
         backgroundColor: color,
         spanGaps: true,
-        borderDash: dashed ? [6,6] : undefined,
       };
     }
 
@@ -1926,9 +2016,18 @@
       const datasets = [];
       window.compareMeta = [];
 
+      // base dataset color fixed (like original self)
+      const baseColor = "rgba(122,162,255,.95)";
       const baseLabel = (viewingName || profileRow?.display_name || currentUser?.email || "Profil");
-      datasets.push(baseScoreDataset(baseLabel, baseSeries.scores, "rgba(122,162,255,.95)"));
+
+      datasets.push(baseScoreDataset(baseLabel, baseSeries.scores, baseColor));
       window.compareMeta.push({ kind:"base", user_id: viewingUserId, display_name: baseLabel });
+
+      compareLabelCache.set(viewingUserId, baseLabel);
+      compareColorCache.set(viewingUserId, baseColor);
+
+      // cache base state (copy ref ok, we never mutate in weekly)
+      compareStateCache.set(viewingUserId, baseSt);
 
       if(compareSelected?.size > 0){
         const selectedIds = Array.from(compareSelected);
@@ -1958,6 +2057,10 @@
 
             datasets.push(baseScoreDataset(label, s.scores, col));
             window.compareMeta.push({ kind:"friend", user_id: uid, display_name: label });
+
+            compareStateCache.set(uid, st);
+            compareLabelCache.set(uid, label);
+            compareColorCache.set(uid, col);
           }catch(e){
             console.warn("Compare fetch failed:", uid, e);
           }
@@ -1967,6 +2070,8 @@
       scoreChart.data.labels = baseSeries.labels;
       scoreChart.data.datasets = datasets;
       scoreChart.update();
+
+      buildWeeklyPanel();
     }
 
     function repaintCharts(){
@@ -1986,6 +2091,166 @@
       sleepChart.update();
 
       refreshCompareDatasets();
+    }
+
+    /*****************
+     * WEEKLY PANEL   *
+     *****************/
+    function startOfWeekMonday(iso){
+      const d = parseISO(iso);
+      const jsDay = d.getDay(); // 0=So..6=Sa
+      const offset = (jsDay === 0) ? 6 : (jsDay - 1); // days since Monday
+      const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset);
+      return toISODate(monday);
+    }
+    function addDaysISO(iso, n){
+      const d = parseISO(iso);
+      const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+      return toISODate(x);
+    }
+    function weekdayIndexMon0(iso){
+      const d = parseISO(iso);
+      const jsDay = d.getDay();
+      return (jsDay === 0) ? 6 : (jsDay - 1); // Mon=0..Sun=6
+    }
+    function isSameWeekMonday(aIso, bIso){
+      return startOfWeekMonday(aIso) === startOfWeekMonday(bIso);
+    }
+    function buildWeeklyPanel(){
+      if(!weeklyAveragesEl || !weeklyWinnersEl) return;
+
+      weeklyAveragesEl.innerHTML = "";
+      weeklyWinnersEl.innerHTML = "";
+
+      const st = uiState();
+      if(!st) return;
+
+      const selISO = st.selectedDate;
+      const today = todayISO();
+
+      const weekStart = startOfWeekMonday(selISO);
+      const isCurrentWeek = isSameWeekMonday(selISO, today);
+      const selIdx = weekdayIndexMon0(selISO);
+      const todayIdx = weekdayIndexMon0(today);
+
+      const lastDayIdx = (() => {
+        // past week -> full 7 days
+        if(!isCurrentWeek){
+          // if week is in the future: show up to 0 (no days)
+          const wStartDate = parseISO(weekStart);
+          const tStartDate = parseISO(startOfWeekMonday(today));
+          if(wStartDate > tStartDate) return -1;
+          return 6;
+        }
+        // current week
+        const capped = Math.min(selIdx, todayIdx);
+        return capped;
+      })();
+
+      // represented users = base + selected friends
+      const users = [];
+      if(scoreChart?.data?.datasets?.length){
+        for(let i=0;i<scoreChart.data.datasets.length;i++){
+          const meta = window.compareMeta?.[i] || { kind:"base" };
+          const uid = meta.user_id || (i===0 ? viewingUserId : null);
+          if(!uid) continue;
+          const label = meta.display_name || scoreChart.data.datasets[i].label || (String(uid).slice(0,8) + "…");
+          const color = scoreChart.data.datasets[i].borderColor || compareColorCache.get(uid) || "rgba(122,162,255,.95)";
+          const stUser = compareStateCache.get(uid);
+          if(!stUser) continue;
+          users.push({ user_id: uid, label, color, state: stUser });
+        }
+      }
+
+      // averages row
+      for(const u of users){
+        let sum = 0;
+        let n = 0;
+        for(let di=0; di<=6; di++){
+          if(di > lastDayIdx) break;
+          const dayISO = addDaysISO(weekStart, di);
+          const s = dayScoreIn(u.state, dayISO);
+          sum += s;
+          n += 1;
+        }
+        const avg = (n > 0) ? Math.round((sum/n)) : 0;
+
+        const chip = document.createElement("div");
+        chip.className = "avgChip";
+
+        const dot = document.createElement("div");
+        dot.className = "dot";
+        dot.style.background = u.color;
+
+        const nm = document.createElement("span");
+        nm.textContent = u.label;
+
+        const val = document.createElement("span");
+        val.style.color = "var(--muted)";
+        val.textContent = ` ${avg}%`;
+
+        chip.appendChild(dot);
+        chip.appendChild(nm);
+        chip.appendChild(val);
+
+        weeklyAveragesEl.appendChild(chip);
+      }
+
+      // winners row
+      const dayNames = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+      for(let di=0; di<7; di++){
+        const item = document.createElement("div");
+        item.className = "dowItem";
+
+        const lbl = document.createElement("div");
+        lbl.className = "dowLabel";
+        lbl.textContent = dayNames[di];
+
+        const box = document.createElement("div");
+        box.className = "winBox";
+
+        const dayISO = addDaysISO(weekStart, di);
+
+        // future day in current week -> blank
+        if(isCurrentWeek && di > todayIdx){
+          box.style.background = "rgba(10,14,30,.10)";
+          box.textContent = "";
+        } else if(lastDayIdx < 0){
+          box.style.background = "rgba(10,14,30,.10)";
+          box.textContent = "";
+        } else {
+          const scores = users.map(u => ({ u, s: dayScoreIn(u.state, dayISO) }));
+          let max = -1;
+          for(const x of scores) if(x.s > max) max = x.s;
+
+          const winners = scores.filter(x => Math.abs(x.s - max) < 1e-9).map(x => x.u);
+
+          if(winners.length === 1){
+            box.style.background = winners[0].color;
+            const ch = String(winners[0].label || "?").trim().charAt(0).toUpperCase();
+            box.textContent = ch || "";
+          } else if(winners.length === 2){
+            const c1 = winners[0].color;
+            const c2 = winners[1].color;
+            box.style.background = `linear-gradient(135deg, ${c1} 0 50%, ${c2} 50% 100%)`;
+            box.textContent = "";
+          } else if(winners.length > 2){
+            const seg = 100 / winners.length;
+            const parts = winners.map((w, i) => `${w.color} ${Math.round(i*seg)}% ${Math.round((i+1)*seg)}%`);
+            box.style.background = `conic-gradient(${parts.join(",")})`;
+            box.textContent = "";
+          } else {
+            box.textContent = "";
+          }
+
+          // readable text on bright colors
+          box.style.color = "rgba(7,10,20,.92)";
+        }
+
+        item.appendChild(lbl);
+        item.appendChild(box);
+        weeklyWinnersEl.appendChild(item);
+      }
     }
 
     /*****************
@@ -2018,7 +2283,7 @@
 
     function gradientForPct(pct){
       const c1 = ampelColor(pct);
-      return `linear-gradient(135deg, ${c1} 0%, rgba(0,0,0,.22) 100%)`;
+      return `linear-gradient(135deg, ${c1} 0%, rgba(10,14,30,.22) 100%)`;
     }
 
     function triBoxForCheckState(stateVal, { clickable=false, disabled=false } = {}){
@@ -2030,8 +2295,6 @@
       if(stateVal === 1){
         b.classList.add("check");
         b.textContent = "✓";
-        b.style.background = gradientForPct(100);
-        b.style.borderColor = "rgba(57,217,138,.55)";
       } else if(stateVal === -1){
         b.classList.add("cross");
         b.textContent = "×";
@@ -2066,10 +2329,9 @@
         return b;
       }
 
-      b.classList.add("check");
+      b.classList.add("checkGrad");
       b.textContent = "✓";
       b.style.background = gradientForPct(pct);
-      b.style.borderColor = "rgba(122,162,255,.45)";
       return b;
     }
 
@@ -2118,13 +2380,12 @@
 
     if(backToMeBtn){
       backToMeBtn.addEventListener("click", async () => {
-        // Hard reset auf Self-Ansicht (verhindert "Editor zeigt noch Freund")
+        // zurück zu dir (inkl. Editor wieder self)
         try{
           await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
           showApp();
           await refreshCompareDatasets();
         }catch(e){
-          // Fallback: nur local reset
           inspected = null;
           inspectedState = null;
           viewingUserId = currentUser?.id;
@@ -2301,8 +2562,8 @@
     }
 
     function renderEditor(){
-      // Editor immer aus SELF-State bauen (auch wenn Freund angesehen wird)
-      const st = state;
+      // Editor zeigt das aktuell angesehene Profil (self oder friend), aber ist im Friend-Modus disabled
+      const st = uiState();
       const viewOnly = uiIsViewOnly();
 
       weightsList.innerHTML = "";
@@ -2429,7 +2690,7 @@
         }
 
         let actionEl;
-        if(h.id === "sleep"){
+        if(h.id === "sleep" || viewOnly){
           actionEl = document.createElement("div");
           actionEl.style.color = "var(--muted)";
           actionEl.style.fontSize = "12px";
@@ -2475,7 +2736,8 @@
     }
 
     function renderTotals(){
-      const sum = totalWeightIn(state);
+      const st = uiState();
+      const sum = totalWeightIn(st);
       totalWeightKpi.textContent = String(round2(sum));
       sumStatus.textContent = `Summe: ${round2(sum)}%`;
 
@@ -2495,7 +2757,8 @@
     }
 
     function renderAddHelp(){
-      const sum = totalWeightIn(state);
+      const st = uiState();
+      const sum = totalWeightIn(st);
       addHelp.textContent =
         `Gewichtsumme aktuell: ${round2(sum)}%. ` +
         (Math.abs(sum-100) < 1e-6 ? `OK.` : `Passe Gewichte an oder nutze "Normieren".`);
@@ -2592,6 +2855,7 @@
       renderTotals();
       renderAddHelp();
       repaintCharts();
+      buildWeeklyPanel();
     }
 
     function bootAfterLogin(){
