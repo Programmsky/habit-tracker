@@ -624,12 +624,16 @@
       color: rgba(7,10,20,.92);
       text-shadow: none;
     }
-    .mark.zero{
-      background: rgba(255,107,107,.95);
-      border-color: rgba(255,107,107,.65);
-      color: rgba(255,255,255,.98);
-      text-shadow: 0 1px 0 rgba(0,0,0,.25);
-    }
+.mark.zero{
+  background: rgba(255,107,107,.95);
+  border-color: rgba(255,107,107,.65);
+  color: rgba(255,255,255,.98);
+  text-shadow: 0 1px 0 rgba(0,0,0,.25);
+  font-size: 13px;
+}
+
+
+
   </style>
 </head>
 <body>
@@ -2364,7 +2368,7 @@
       if(stateName === "empty"){
         el.textContent = "✓";
       } else if(stateName === "zero"){
-        el.textContent = "×";
+        el.textContent = "✕";
       } else {
         el.textContent = "✓";
       }
