@@ -1747,30 +1747,35 @@
     }
 
     function numericCreditIn(st, habit, iso){
-      const w = Number(habit.weight||0);
-      if(w <= 0) return 0;
+  const w = Number(habit.weight || 0);
+  if (w <= 0) return 0;
 
-      const goal = Number(habit.goal);
-      if(!Number.isFinite(goal)) return 0;
+  const goal = Number(habit.goal);
+  if (!Number.isFinite(goal)) return 0;
 
-      const v = getNumericEntryIn(st, iso, habit.id).value;
-      if(v == null || Number.isNaN(v)) return 0;
+  const v = getNumericEntryIn(st, iso, habit.id).value;
+  if (v == null || Number.isNaN(v)) return 0;
 
-      const dir = habit.dir === "MAX" ? "MAX" : "MIN";
-      const done = (dir === "MIN") ? (v >= goal) : (v <= goal);
-      if(done) return w;
+  const dir = habit.dir === "MAX" ? "MAX" : "MIN";
 
-      const half = Number(habit.halfLife);
-      if(!Number.isFinite(half) || half <= 0) return 0;
+  // Ziel erreicht → 100 %
+  const done = (dir === "MIN") ? (v >= goal) : (v <= goal);
+  if (done) return w;
 
-      const delta = (dir === "MIN")
-        ? Math.max(0, goal - v)
-        : Math.max(0, v - goal);
+  // 🔴 WICHTIG: bei MIN-Zielen soll Wert 0 IMMER 0 % ergeben
+  if (dir === "MIN" && v === 0) return 0;
 
-      const n = delta / half;
-      const factor = Math.pow(0.5, n);
-      return w * factor;
-    }
+  const half = Number(habit.halfLife);
+  if (!Number.isFinite(half) || half <= 0) return 0;
+
+  const delta = (dir === "MIN")
+    ? Math.max(0, goal - v)
+    : Math.max(0, v - goal);
+
+  const factor = Math.pow(0.5, delta / half);
+  return w * factor;
+}
+
 
     function totalWeightIn(st){ return st.habits.reduce((sum,h)=> sum + Number(h.weight||0), 0); }
 
