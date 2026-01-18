@@ -91,6 +91,76 @@
     canvas{ width:100% !important; height:280px !important; }
     .clickHint{ margin-top:8px; font-size:12px; color:var(--muted); }
     .tiny{ font-size:11px; color:var(--muted); }
+	/* custom tooltip (match chart/panel look) */
+.tipWrap{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tipBubble{
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  transform: translateX(-50%) translateY(-6px);
+  width: max-content;
+  max-width: min(360px, 78vw);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(35,48,90,.75);
+  background: rgba(10,14,30,.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+  z-index: 60;
+}
+
+.tipWrap:hover .tipBubble{
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* kleines "Dreieck" wie Tooltip */
+.tipBubble::before{
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: rgba(10,14,30,.92);
+  border-left: 1px solid rgba(35,48,90,.75);
+  border-top: 1px solid rgba(35,48,90,.75);
+  transform: translateX(-50%) rotate(45deg);
+}
+/* Hover-Hilfe für Rang (nur auf Anfrage sichtbar) */
+.rankHelp{
+  position: relative;
+}
+
+.rankHelp:hover::after{
+  content: "Rang bestimmt die Reihenfolge: kleinere Zahl = weiter oben.";
+  position: absolute;
+  bottom: 120%;
+  left: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(35,48,90,.75);
+  background: rgba(10,14,30,.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 60;
+}
+
 
     /* Weekly panel under charts */
     .weeklyPanel{
@@ -207,6 +277,93 @@
       border:1px solid rgba(35,48,90,.55);
       border-radius: 12px;
     }
+	
+	/* HABIT CLASSES */
+.classBlock{
+  padding:10px 10px;
+  background: rgba(15,23,48,.40);
+  border:1px solid rgba(35,48,90,.55);
+  border-radius: 12px;
+}
+
+/* Mehr Drop-Platz zwischen Klassen (auch unter der letzten) */
+.classBlock{
+  margin-bottom: 14px; /* zusätzlicher Abstand für Drag-n-Drop nach außen */
+}
+
+/* Extra Drop-Zone-Gefühl unter der letzten Klasse */
+.habitList{
+  padding-bottom: 40px;
+}
+
+.classHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  cursor:pointer;
+  user-select:none;
+}
+
+.classTitle{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+}
+
+.className{
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.classMeta{
+  color:var(--muted);
+  font-size:12px;
+  white-space:nowrap;
+}
+
+.classBody{
+  margin-top:10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.classCollapsed .classBody{
+  display:none;
+}
+
+/* Klassen bearbeiten: Rang-Feld schmaler + KEIN min-width vom .field (sonst ueberlappt es) */
+.classRankInput{
+  width: 90px !important;
+  max-width: 90px !important;
+  min-width: 0 !important;     /* wichtig: ueberschreibt .field { min-width:180px } */
+  padding: 8px 8px !important; /* etwas kompakter */
+  text-align: left;
+}
+
+
+
+.classBlock.dropHover{
+  border-color: rgba(122,162,255,.75);
+  background: rgba(122,162,255,.10);
+}
+.habitRow.dragging{
+  opacity: .55;
+}
+/* Browser-Focus-Rahmen beim Drag entfernen (dieser "blaue Rahmen") */
+.habitRow:focus,
+.habitRow:focus-visible,
+.classBlock:focus,
+.classBlock:focus-visible{
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+
     .habitLeft{ display:flex; flex-direction:column; gap:3px; min-width:0; }
     .habitName{ font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .habitMeta{ display:flex; gap:10px; color:var(--muted); font-size:12px; flex-wrap:wrap; }
@@ -608,10 +765,42 @@
     .mark.clickable{ cursor:pointer; }
     .mark.disabled{ opacity:.55; cursor:default; }
 
-    .mark.empty{
-      background: transparent;
-      color: transparent;
-    }
+    /* HABITS: unverändert */
+.mark.empty{
+  background: transparent;
+  color: transparent;
+}
+
+/* Klassenstatus soll GENAU wie Habits aussehen */
+.mark.classStatus{
+  background: inherit;
+  border-color: inherit;
+  color: inherit;
+  box-shadow: inherit;
+}
+
+/* Kreis nur für Klassenstatus */
+/* Test: OFFEN = gelbes, leeres Feld (kein Symbol) */
+.mark.empty.classStatus::after{
+  content: "";
+}
+
+.mark.empty.classStatus{
+  position: relative;
+}
+
+/* Option B (testen): gelbes leeres Feld -> KEIN Kreis anzeigen */
+.mark.empty.classStatus::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+
     .mark.full{
       background: rgba(57,217,138,.95);
       border-color: rgba(57,217,138,.65);
@@ -784,10 +973,17 @@
                 stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
                 transform="rotate(-90 60 60)" filter="url(#softShadow)"></circle>
             </svg>
-            <div class="circleCenter">
-              <div class="bigPct" id="circlePct">0%</div>
-              <div class="smallLbl" id="circleSub">0 / 100</div>
-            </div>
+<div class="circleCenter">
+  <div class="bigPct" id="circlePct">0%</div>
+
+  <div class="tipWrap" id="maxPossibleWrap">
+    <div class="smallLbl" id="circleMaxPossible">max.: 100%</div>
+    <div class="tipBubble" id="circleMaxPossibleTip">
+      Heute maximal noch erreichbare Prozente (abzüglich bereits unwiderruflich verlorener Anteile).
+    </div>
+  </div>
+</div>
+
           </div>
           <div class="circleStats">
             <div>Erledigt: <span class="kpi" id="doneCount">0</span></div>
@@ -810,72 +1006,100 @@
           </div>
         </summary>
 
-        <div class="editorBody">
-          <div class="panel">
-            <h3>Habit hinzufügen</h3>
-            <div class="row">
-              <label for="newHabitName">Name</label>
-              <input class="field" id="newHabitName" placeholder="z. B. Sport, Lesen …" />
-            </div>
+<div class="editorBody">
+  <!-- LINKS: Habit + Klasse -->
+  <div style="display:flex;flex-direction:column;gap:14px;">
+    <div class="panel">
+      <h3>Habit hinzufügen</h3>
+      <div class="row">
+        <label for="newHabitName">Name</label>
+        <input class="field" id="newHabitName" placeholder="z. B. Sport, Lesen …" />
+      </div>
 
-            <div class="row">
-              <label for="newHabitWeight">Gewicht (%)</label>
-              <input class="field" id="newHabitWeight" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
-            </div>
+      <div class="row">
+        <label for="newHabitWeight">Gewicht (%)</label>
+        <input class="field" id="newHabitWeight" type="number" min="0" step="0.1" value="0" inputmode="decimal" />
+      </div>
 
-            <div class="row">
-              <label>Numerisches Ziel?</label>
-              <div class="inlineToggle">
-                <label class="inlineToggle" for="newHabitIsNumeric" style="min-width:auto;">
-                  <input id="newHabitIsNumeric" type="checkbox" />
-                  <span>Ja</span>
-                </label>
-                <span class="tiny">(dann wird oben ein Ist-Wert eingetragen)</span>
-              </div>
-            </div>
-
-            <div class="row hidden" id="newHabitGoalRow">
-              <label for="newHabitGoal">Zielwert</label>
-              <input class="field" id="newHabitGoal" type="text" inputmode="decimal" placeholder="z. B. 2000" />
-              <span class="tiny">Standard: ≥ (mindestens)</span>
-            </div>
-
-            <div class="row">
-              <button class="btn" id="addHabitBtn" type="button">Hinzufügen</button>
-            </div>
-
-            <div class="help" id="addHelp"></div>
-          </div>
-
-          <div class="panel">
-            <h3>Gewichte & Ziele bearbeiten</h3>
-
-            <div class="weightsGrid weightsHead">
-              <div>Habit</div>
-              <div>Gewichtung (in %)</div>
-              <div>Ziel (z. B. 8 für 8h Schlaf)</div>
-              <div>Halbwert</div>
-              <div></div>
-            </div>
-
-            <div id="weightsList"></div>
-
-            <div class="totals">
-              <div>Gesamt: <span class="kpi" id="totalWeightKpi">100</span>%</div>
-              <div id="totalMsg" class="goodText">OK</div>
-            </div>
-
-            <div class="row" style="margin-top:10px;">
-              <button class="btn" id="normalizeBtn" type="button">Automatisch auf 100 normieren</button>
-              <button class="btn" id="resetBtn" type="button" style="border-color: rgba(255,107,107,.55);">Alles zurücksetzen</button>
-            </div>
-
-            <div class="help">
-              <span class="kpi">Dezimal:</span> Zahlen dürfen mit <span class="kpi">Komma</span> eingegeben werden (z. B. 6,5 oder 8,33).<br>
-              <span class="kpi">Halbwert:</span> Bei Zielverfehlung wird pro (Abweichung / Halbwert) die Gewichtung exponentiell halbiert (kontinuierlich).
-            </div>
-          </div>
+      <div class="row">
+        <label>Numerisches Ziel?</label>
+        <div class="inlineToggle">
+          <label class="inlineToggle" for="newHabitIsNumeric" style="min-width:auto;">
+            <input id="newHabitIsNumeric" type="checkbox" />
+            <span>Ja</span>
+          </label>
+          <span class="tiny">(dann wird oben ein Ist-Wert eingetragen)</span>
         </div>
+      </div>
+
+      <div class="row hidden" id="newHabitGoalRow">
+        <label for="newHabitGoal">Zielwert</label>
+        <input class="field" id="newHabitGoal" type="text" inputmode="decimal" placeholder="z. B. 2000" />
+        <span class="tiny">Standard: ≥ (mindestens)</span>
+      </div>
+
+      <div class="row">
+        <button class="btn" id="addHabitBtn" type="button">Hinzufügen</button>
+      </div>
+
+      <div class="help" id="addHelp"></div>
+    </div>
+
+    <div class="panel" id="classEditorPanel">
+      <h3>Klasse hinzufügen</h3>
+
+      <div class="row">
+        <label for="newClassName">Name</label>
+        <input class="field" id="newClassName" placeholder="z. B. Morgens" />
+      </div>
+
+      <div class="row">
+        <label for="newClassRank">Rang</label>
+        <input class="field rankHelp" id="newClassRank" type="number" min="1" step="1" placeholder="z. B. 1" />
+      </div>
+
+      <div class="row">
+        <button class="btn" id="addClassBtn" type="button">Klasse hinzufügen</button>
+      </div>
+
+      <div class="help" id="classHelp"></div>
+
+      <!-- HIER KOMMT GLEICH "Klassen bearbeiten" DRUNTER -->
+      <div id="classesManageWrap" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- RECHTS: Gewichte -->
+  <div class="panel">
+    <h3>Gewichte & Ziele bearbeiten</h3>
+
+    <div class="weightsGrid weightsHead">
+      <div>Habit</div>
+      <div>Gewichtung (in %)</div>
+      <div>Ziel (z. B. 8 für 8h Schlaf)</div>
+      <div>Halbwert</div>
+      <div></div>
+    </div>
+
+    <div id="weightsList"></div>
+
+    <div class="totals">
+      <div>Gesamt: <span class="kpi" id="totalWeightKpi">100</span>%</div>
+      <div id="totalMsg" class="goodText">OK</div>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <button class="btn" id="normalizeBtn" type="button">Automatisch auf 100 normieren</button>
+      <button class="btn" id="resetBtn" type="button" style="border-color: rgba(255,107,107,.55);">Alles zurücksetzen</button>
+    </div>
+
+    <div class="help">
+      <span class="kpi">Dezimal:</span> Zahlen dürfen mit <span class="kpi">Komma</span> eingegeben werden (z. B. 6,5 oder 8,33).<br>
+      <span class="kpi">Halbwert:</span> Bei Zielverfehlung wird pro (Abweichung / Halbwert) die Gewichtung exponentiell halbiert (kontinuierlich).
+    </div>
+  </div>
+</div>
+
       </details>
     </section>
 
@@ -966,16 +1190,23 @@
     /**********************
      * APP STATE MODEL    *
      **********************/
-    const defaultState = () => ({
-      habits: [
-        { id: "sleep", name: "Schlaf", weight: 30, type: "numeric", goal: 7.5, dir: "MIN", halfLife: 0.5 },
-        { id: cryptoId(), name: "Bewegung", weight: 35, type: "check" },
-        { id: cryptoId(), name: "Lesen", weight: 35, type: "check" },
-      ],
-      dayData: {},
-      selectedDate: todayISO(),
-      viewOnly: false,
-    });
+const defaultState = () => ({
+  habits: [
+    { id: "sleep", name: "Schlaf", weight: 30, type: "numeric", goal: 7.5, dir: "MIN", halfLife: 0.5 },
+    { id: cryptoId(), name: "Bewegung", weight: 35, type: "check" },
+    { id: cryptoId(), name: "Lesen", weight: 35, type: "check" },
+  ],
+  classes: [
+    // Beispiel (optional leer lassen):
+    // { id: cryptoId(), name: "Morgens", rank: 1, collapsed: false, habitIds: [] }
+  ],
+  classes: [],
+  dayData: {},
+  selectedDate: todayISO(),
+  viewOnly: false,
+});
+
+
 
     function cryptoId(){ return "h_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16); }
     function todayISO(){ return toISODate(new Date()); }
@@ -1056,6 +1287,16 @@
         }
         if(!day.values || typeof day.values !== "object") day.values = {};
       }
+if(!Array.isArray(st.classes)){
+  st.classes = [];
+}
+st.classes = st.classes.map(c => ({
+  id: c.id || cryptoId(),
+  name: String(c.name || "Gruppe"),
+  rank: Number.isFinite(Number(c.rank)) ? Number(c.rank) : 1,
+  collapsed: !!c.collapsed,
+  habitIds: Array.isArray(c.habitIds) ? c.habitIds.filter(Boolean) : []
+}));
 
       st.viewOnly = false;
       return st;
@@ -1172,7 +1413,7 @@
 
     const progressCircle = document.getElementById("progressCircle");
     const circlePct = document.getElementById("circlePct");
-    const circleSub = document.getElementById("circleSub");
+	const circleMaxPossible = document.getElementById("circleMaxPossible");
     const doneCountEl = document.getElementById("doneCount");
     const habitCountEl = document.getElementById("habitCount");
 
@@ -1188,6 +1429,12 @@
 
     const addHabitBtn = document.getElementById("addHabitBtn");
     const addHelp = document.getElementById("addHelp");
+	
+	const newClassName = document.getElementById("newClassName");
+	const newClassRank = document.getElementById("newClassRank");
+	const addClassBtn = document.getElementById("addClassBtn");
+	const classHelp = document.getElementById("classHelp");
+	const classesManageWrap = document.getElementById("classesManageWrap");
 
     const weightsList = document.getElementById("weightsList");
     const totalWeightKpi = document.getElementById("totalWeightKpi");
@@ -1480,6 +1727,8 @@
     }
 
     sendFriendReqBtn.addEventListener("click", sendFriendRequestByEmail);
+	enhanceInput(friendSearchEmail, { onEnter: sendFriendRequestByEmail });
+
 
     async function acceptRequest(reqId){
       const { error } = await sb.from("friend_requests")
@@ -1778,6 +2027,175 @@
 
 
     function totalWeightIn(st){ return st.habits.reduce((sum,h)=> sum + Number(h.weight||0), 0); }
+	
+	function classesSorted(st){
+  const arr = Array.isArray(st.classes) ? [...st.classes] : [];
+  // rank 1 ganz oben, dann 2,3...
+  arr.sort((a,b) => Number(a.rank||1) - Number(b.rank||1));
+  return arr;
+}
+
+const UNGROUPED_CLASS_ID = "__ungrouped__";
+
+function getUngroupedRankSelf(){
+  return Number.isFinite(Number(state?.ungroupedRank)) ? Math.floor(Number(state.ungroupedRank)) : null;
+}
+
+function setUngroupedRankSelf(nOrNull){
+  if(uiIsViewOnly()) return;
+  if(nOrNull == null){
+    delete state.ungroupedRank;
+  }else{
+    state.ungroupedRank = Math.floor(Number(nOrNull));
+  }
+  scheduleSaveState();
+}
+
+function hasAnyRealClasses(st){
+  return Array.isArray(st.classes) && st.classes.length > 0;
+}
+
+function classHabitIdSet(st){
+  const set = new Set();
+  for(const c of (st.classes || [])){
+    for(const hid of (c.habitIds || [])) set.add(hid);
+  }
+  // Ungruppiert ist KEINE "Klasse mit habitIds" -> alles was nicht in set ist, bleibt ungruppiert
+  return set;
+}
+
+function isNaturalInt(n){
+  return Number.isFinite(n) && Math.floor(n) === n && n >= 1;
+}
+
+function isClassRankTakenSelf(rank, excludeClassId=null){
+  const r = Number(rank);
+  if(!isNaturalInt(r)) return false;
+  for(const c of (state.classes || [])){
+    if(excludeClassId && c.id === excludeClassId) continue;
+    if(Number(c.rank) === r) return true;
+  }
+  return false;
+}
+
+function toggleClassCollapsedSelf(classId){
+  if(uiIsViewOnly()) return;
+  const c = (state.classes || []).find(x => x.id === classId);
+  if(!c) return;
+  c.collapsed = !c.collapsed;
+  scheduleSaveState();
+}
+
+function habitMarkStateForDay(st, habit, iso){
+  // returns: "empty" | "full" | "partial" | "zero"
+  if(habit.type !== "numeric"){
+    const cs = getCheckStateIn(st, iso, habit.id);
+    if(cs === 0) return "empty";
+    if(cs === 1) return "full";
+    return "zero"; // -1
+  }
+
+  const entry = getNumericEntryIn(st, iso, habit.id);
+  const hasValue =
+    (entry.value != null && !Number.isNaN(entry.value)) ||
+    (typeof entry.text === "string" && entry.text.trim().length > 0);
+
+  if(!hasValue) return "empty";
+
+  const w = Number(habit.weight || 0);
+  if(w <= 0) return "empty";
+
+  const credit = numericCreditIn(st, habit, iso);
+  const pct = Math.round((credit / w) * 100);
+
+  if(pct <= 0) return "zero";
+  if(pct >= 100) return "full";
+  return "partial";
+}
+
+function classAggregateMarkStateForDay(st, cls, iso){
+  const ids = Array.isArray(cls.habitIds) ? cls.habitIds : [];
+  const habits = st.habits.filter(h => ids.includes(h.id));
+
+  // leere Klasse: keine Habits -> "empty"
+  if(!habits.length) return "empty";
+
+  // 1) Roh-Zustaende pro Habit
+  const rawStates = habits.map(h => ({ h, s: habitMarkStateForDay(st, h, iso) }));
+
+  // Priorität 1: wenn eines leer -> leer (offen)
+  if(rawStates.some(x => x.s === "empty")) return "empty";
+
+  // 2) Spezialregel NUR für Klassen-Status:
+  // Numeric + dir MAX + (nicht erreicht, also "partial") wird zu:
+  // - "zero", wenn Verlust > 50% (credit/w < 0.5)
+  // - "full", wenn Verlust < 50% (credit/w >= 0.5)
+  // (Habit selbst bleibt weiterhin "partial" gelb!)
+  const states = rawStates.map(x => {
+    const h = x.h;
+    let s = x.s;
+
+    if(s === "partial" && h.type === "numeric"){
+      const dir = (h.dir === "MAX") ? "MAX" : "MIN";
+      if(dir === "MAX"){
+        const w = Number(h.weight || 0);
+        const credit = (w > 0) ? numericCreditIn(st, h, iso) : 0;
+        const frac = (w > 0) ? (credit / w) : 0; // 0..1
+
+        // >50% Verlust => frac < 0.5 => wie "verkackt" fuer Klassenstatus
+        s = (frac < 0.5) ? "zero" : "full";
+      }
+    }
+
+    return { h, s };
+  });
+
+  // 3) Danach gilt weiterhin:
+  // wenn jetzt noch irgendein "partial" existiert -> partial (typisch MIN-Unterziel)
+  if(states.some(x => x.s === "partial")) return "partial";
+
+  // jetzt bleiben nur full/zero übrig
+  const allFull = states.every(x => x.s === "full");
+  if(allFull) return "full";
+
+  const allZero = states.every(x => x.s === "zero");
+  if(allZero) return "zero";
+
+      // Mischfall nur aus full + zero:
+  // NEU: nach ANZAHL (nicht nach Gewicht), weil es um "verkackt vs geschafft" pro Habit geht
+    let nFull = 0;
+  let nZero = 0;
+  for(const x of states){
+    if(x.s === "full") nFull += 1;
+    else if(x.s === "zero") nZero += 1;
+  }
+  return (nZero >= nFull) ? "zero" : "full";
+}
+
+function removeHabitFromAllClassesSelf(habitId){
+  if(uiIsViewOnly()) return;
+  if(!Array.isArray(state.classes)) state.classes = [];
+  for(const c of state.classes){
+    if(!Array.isArray(c.habitIds)) c.habitIds = [];
+    c.habitIds = c.habitIds.filter(id => id !== habitId);
+  }
+}
+
+function addHabitToClassSelf(habitId, classId){
+  if(uiIsViewOnly()) return;
+  const c = (state.classes || []).find(x => x.id === classId);
+  if(!c) return;
+  if(!Array.isArray(c.habitIds)) c.habitIds = [];
+  if(!c.habitIds.includes(habitId)) c.habitIds.push(habitId);
+}
+
+function moveHabitToClassSelf(habitId, classIdOrNull){
+  if(uiIsViewOnly()) return;
+  removeHabitFromAllClassesSelf(habitId);
+  if(classIdOrNull) addHabitToClassSelf(habitId, classIdOrNull);
+  scheduleSaveState();
+}
+
 
     function earnedWeightIn(st, iso){
       let w=0;
@@ -1793,6 +2211,54 @@
       if(tw <= 0) return 0;
       return round2((earnedWeightIn(st, iso)/tw)*100);
     }
+function numericHasEntry(st, habit, iso){
+  const entry = getNumericEntryIn(st, iso, habit.id);
+  return (
+    (entry.value != null && !Number.isNaN(entry.value)) ||
+    (typeof entry.text === "string" && entry.text.trim().length > 0)
+  );
+}
+
+// Verlustanteil (irreversibel) in %-Punkten für "Heute noch max. möglich"
+function lostWeightTodayIn(st, habit, iso){
+  const w = Number(habit.weight || 0);
+  if(w <= 0) return 0;
+
+  // CHECK-HABITS:
+  // leer (0) zählt NICHT als verloren
+  // rot (-1) zählt voll verloren
+  if(habit.type !== "numeric"){
+    const cs = getCheckStateIn(st, iso, habit.id);
+    if(cs === 0) return 0;   // leer -> 0 Verlust
+    if(cs === -1) return w;  // rot -> voller Verlust
+    return 0;                // grün -> 0 Verlust
+  }
+
+  // NUMERIC-HABITS:
+  // leer (kein Eintrag) zählt NICHT als verloren
+  if(!numericHasEntry(st, habit, iso)) return 0;
+
+  const credit = numericCreditIn(st, habit, iso);
+
+  // rot (voll entwertet) -> voller Verlust
+  if(credit <= 0) return w;
+
+  // NEU: MIN-Ziele (mindestens) NICHT abziehen (weil noch erreichbar)
+  const dir = (habit.dir === "MAX") ? "MAX" : "MIN";
+  if(dir === "MIN") return 0;
+
+  // MAX-Ziele: irreversibel verloren = w - credit
+  return clamp(w - credit, 0, w);
+}
+
+
+function maxPossibleTodayPct(st, iso){
+  let lost = 0;
+  for(const h of st.habits){
+    lost += lostWeightTodayIn(st, h, iso);
+  }
+  return clamp(round2(100 - lost), 0, 100);
+}
 
     function getHabitDoneForDayIn(st, habit, iso){
       if(habit.type === "numeric"){
@@ -1856,6 +2322,63 @@
      ***************/
     let scoreChart = null;
     let sleepChart = null;
+	// Auto-Scroll beim Drag&Drop (frueher am oberen Rand starten)
+let draggingHabitId = null;
+let dragScrollRAF = null;
+let lastDragY = null;
+
+const DRAG_SCROLL_EDGE_PX = 160;   // frueher starten (groesser = frueher)
+const DRAG_SCROLL_MAX_PX = 22;     // max. Scroll pro Frame
+const DRAG_SCROLL_MIN_PX = 2;
+
+function stopDragAutoScroll(){
+  if(dragScrollRAF){
+    cancelAnimationFrame(dragScrollRAF);
+    dragScrollRAF = null;
+  }
+  lastDragY = null;
+}
+
+function dragAutoScrollTick(){
+  if(!draggingHabitId || lastDragY == null){
+    stopDragAutoScroll();
+    return;
+  }
+
+  const y = lastDragY;
+  const h = window.innerHeight || document.documentElement.clientHeight || 0;
+
+  let dy = 0;
+
+  if(y < DRAG_SCROLL_EDGE_PX){
+    const t = clamp((DRAG_SCROLL_EDGE_PX - y) / DRAG_SCROLL_EDGE_PX, 0, 1);
+    dy = -Math.round(DRAG_SCROLL_MIN_PX + (DRAG_SCROLL_MAX_PX - DRAG_SCROLL_MIN_PX) * t);
+  } else if(y > h - DRAG_SCROLL_EDGE_PX){
+    const t = clamp((y - (h - DRAG_SCROLL_EDGE_PX)) / DRAG_SCROLL_EDGE_PX, 0, 1);
+    dy = Math.round(DRAG_SCROLL_MIN_PX + (DRAG_SCROLL_MAX_PX - DRAG_SCROLL_MIN_PX) * t);
+  }
+
+  if(dy !== 0) window.scrollBy({ top: dy, left: 0, behavior: "auto" });
+
+  dragScrollRAF = requestAnimationFrame(dragAutoScrollTick);
+}
+
+document.addEventListener("dragover", (e) => {
+  if(!draggingHabitId) return;
+  lastDragY = e.clientY;
+  if(!dragScrollRAF) dragScrollRAF = requestAnimationFrame(dragAutoScrollTick);
+});
+
+document.addEventListener("drop", () => {
+  draggingHabitId = null;
+  stopDragAutoScroll();
+});
+
+document.addEventListener("dragend", () => {
+  draggingHabitId = null;
+  stopDragAutoScroll();
+});
+
 
     function destroyCharts(){
       try{ if(scoreChart){ scoreChart.destroy(); scoreChart=null; } }catch{}
@@ -2164,15 +2687,20 @@
       const selIdx = weekdayIndexMon0(selISO);
       const todayIdx = weekdayIndexMon0(today);
 
-      const lastDayIdx = (() => {
-        if(!isCurrentWeek){
-          const wStartDate = parseISO(weekStart);
-          const tStartDate = parseISO(startOfWeekMonday(today));
-          if(wStartDate > tStartDate) return -1;
-          return 6;
-        }
-        return Math.min(selIdx, todayIdx);
-      })();
+const lastDayIdx = (() => {
+  if(!isCurrentWeek){
+    const wStartDate = parseISO(weekStart);
+    const tStartDate = parseISO(startOfWeekMonday(today));
+    if(wStartDate > tStartDate) return -1;
+    return 6;
+  }
+
+  // Heute soll NICHT in den Wochendurchschnitt zählen:
+  // letzter zählender Tag ist gestern (todayIdx - 1).
+  const lastAllowed = todayIdx - 1;          // kann -1 sein (wenn heute Montag)
+  return Math.min(selIdx, lastAllowed);      // falls man einen früheren Tag ausgewählt hat
+})();
+
 
       // represented users = datasets in chart
       const users = [];
@@ -2312,7 +2840,6 @@
       progressCircle.style.strokeDashoffset = circ * (1 - pct/100);
       progressCircle.style.stroke = ampelColor(pct);
       circlePct.textContent = `${Math.round(pct)}%`;
-      circleSub.textContent = `${Math.round(pct)} / 100`;
     }
 
     function setSelectedDate(iso, { viewOnly=false } = {}){
@@ -2368,16 +2895,18 @@
     }
 
     function markBoxApplyState(el, stateName){
-      el.classList.remove("empty","full","partial","zero");
-      el.classList.add(stateName);
-      if(stateName === "empty"){
-        el.textContent = "✓";
-      } else if(stateName === "zero"){
-        el.textContent = "✕";
-      } else {
-        el.textContent = "✓";
-      }
-    }
+  el.classList.remove("empty","full","partial","zero");
+  el.classList.add(stateName);
+
+  // Standard: nichts anzeigen (wichtig für "empty", damit kein ✓ + ○ gleichzeitig entsteht)
+  el.textContent = "";
+
+  if(stateName === "zero"){
+    el.textContent = "✕";
+  } else if(stateName === "full" || stateName === "partial"){
+    el.textContent = "✓";
+  }
+}
 
     function makeMarkBox({ clickable=false, disabled=false } = {}){
       const b = document.createElement("div");
@@ -2411,6 +2940,12 @@
       const score = dayScoreIn(st, iso);
       scoreLabel.textContent = `${Math.round(score)}%`;
       setCircle(score);
+	  
+const maxPossible = maxPossibleTodayPct(st, iso);
+if(circleMaxPossible){
+  circleMaxPossible.textContent = `max.: ${Math.round(maxPossible)}%`;
+}
+
 
       let c=0;
       for(const h of st.habits) if(getHabitDoneForDayIn(st, h, iso)) c++;
@@ -2441,175 +2976,336 @@
     }
 
     function renderHabitList(){
-      habitListEl.innerHTML = "";
-      const st = uiState();
-      const iso = st.selectedDate;
-      const viewOnly = uiIsViewOnly();
-      const sortedHabits = [...st.habits].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
+  habitListEl.innerHTML = "";
+  const st = uiState();
+  const iso = st.selectedDate;
+  const viewOnly = uiIsViewOnly();
 
-      for(const h of sortedHabits){
-        const row = document.createElement("div");
-        row.className = "habitRow";
+  const sortedHabits = [...st.habits].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
 
-        const left = document.createElement("div");
-        left.className = "habitLeft";
+  const classes = classesSorted(st);
+  const assignedSet = classHabitIdSet(st);
+  const ungroupedHabits = sortedHabits.filter(h => !assignedSet.has(h.id));
+  // Wenn es KEINE echten Klassen gibt: wie frueher einfach nur Habits listen
+if(!hasAnyRealClasses(st)){
+  for(const h of sortedHabits){
+    habitListEl.appendChild(renderOneHabit(h));
+  }
+  return;
+}
 
-        const name = document.createElement("div");
-        name.className = "habitName";
-        name.textContent = h.name;
 
-        const meta = document.createElement("div");
-        meta.className = "habitMeta";
+  function renderOneHabit(h){
+    const row = document.createElement("div");
+    row.className = "habitRow";
+	// Drag starten (nur wenn Bearbeiten)
+row.draggable = !viewOnly;
+if(!viewOnly){
+  row.addEventListener("dragstart", (e) => {
+    row.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(h.id));
+	draggingHabitId = String(h.id);
+  });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("dragging");
+  });
+}
 
-        const b1 = document.createElement("span");
-        b1.className = "metaBadge";
-        b1.textContent = `Gewicht: ${formatDecimalDE(Number(h.weight||0), 2)}%`;
-        meta.appendChild(b1);
 
-        if(h.type === "numeric" && Number.isFinite(Number(h.goal))){
-          const b2 = document.createElement("span");
-          b2.className = "metaBadge";
-          const halfTxt = (Number.isFinite(Number(h.halfLife)) && Number(h.halfLife) > 0) ? `, Halbwert: ${formatDecimalDE(Number(h.halfLife), 2)}` : "";
-          b2.textContent = `Ziel: ${(h.dir === "MAX") ? "max." : "mind."} ${formatDecimalDE(Number(h.goal), 2)}${halfTxt}`;
-          meta.appendChild(b2);
-        }
+    const left = document.createElement("div");
+    left.className = "habitLeft";
 
-        if(viewOnly){
-          const lock = document.createElement("span");
-          lock.className = "metaBadge lockBadge";
-          lock.textContent = "Nur Ansicht";
-          meta.appendChild(lock);
-        }
+    const name = document.createElement("div");
+    name.className = "habitName";
+    name.textContent = h.name;
 
-        left.appendChild(name);
-        left.appendChild(meta);
+    const meta = document.createElement("div");
+    meta.className = "habitMeta";
 
-        const right = document.createElement("div");
-        right.className = "habitRight";
+    const b1 = document.createElement("span");
+    b1.className = "metaBadge";
+    b1.textContent = `Gewicht: ${formatDecimalDE(Number(h.weight||0), 2)}%`;
+    meta.appendChild(b1);
 
-        if(h.type === "numeric"){
-          const input = document.createElement("input");
-          input.className = "numericInput";
-          input.type = "text";
-          input.placeholder = "Ist-Wert…";
-          input.inputMode = "decimal";
-          input.autocomplete = "off";
-          input.spellcheck = false;
-
-          const entry = getNumericEntryIn(st, iso, h.id);
-          input.value = (entry.text && entry.text.length)
-            ? entry.text
-            : (entry.value == null ? "" : formatDecimalDE(entry.value, 2));
-
-          enhanceInput(input);
-          input.disabled = viewOnly;
-          input.style.opacity = viewOnly ? ".55" : "1";
-
-          const box = makeMarkBox({ clickable:false, disabled:viewOnly });
-
-          // initial box state (based on habit-internal pct, rounded)
-          const hasValue = (entry.value != null && !Number.isNaN(entry.value)) || (typeof entry.text === "string" && entry.text.trim().length > 0);
-          if(!hasValue){
-            markBoxApplyState(box, "empty");
-          } else {
-            const w = Number(h.weight||0);
-            const credit = (w > 0) ? numericCreditIn(st, h, iso) : 0;
-            const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
-            markBoxApplyState(box, markStateFromPct(pct));
-          }
-
-          // CRITICAL FIX: do NOT rerenderAll() on each keystroke (it recreates input and cuts typing).
-          input.addEventListener("input", () => {
-            if(viewOnly) return;
-
-            const isSleep = (h.id === "sleep");
-            setNumericValueForDay(iso, h.id, input.value, isSleep ? { min:0, max:24 } : {});
-
-            // update box + top + charts without rebuilding habit list
-            const selfHabit = state.habits.find(x => x.id === h.id) || h;
-            const entryNow = getNumericEntryIn(state, iso, selfHabit.id);
-            const hasVal = (entryNow.value != null && !Number.isNaN(entryNow.value)) || (typeof entryNow.text === "string" && entryNow.text.trim().length > 0);
-
-            if(!hasVal){
-              markBoxApplyState(box, "empty");
-            } else {
-              const w = Number(selfHabit.weight||0);
-              const credit = (w > 0) ? numericCreditIn(state, selfHabit, iso) : 0;
-              const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
-              markBoxApplyState(box, markStateFromPct(pct));
-            }
-
-            renderTop();
-            repaintCharts();
-            renderTotals();
-            renderAddHelp();
-            buildWeeklyPanel();
-          });
-
-          input.addEventListener("blur", () => {
-            if(viewOnly) return;
-
-            const n = parseDecimalDE(input.value);
-            const entry2 = getNumericEntrySelf(iso, h.id);
-
-            if(Number.isFinite(n)){
-              let v = n;
-              if(h.id === "sleep") v = clamp(v,0,24);
-              entry2.value = v;
-              entry2.text = formatDecimalDE(v, 2);
-              input.value = entry2.text; // normalize on blur
-            } else {
-              entry2.value = null;
-              entry2.text = "";
-              input.value = "";
-            }
-
-            scheduleSaveState();
-
-            // refresh derived UI (safe on blur)
-            renderHabitList();
-            renderTop();
-            repaintCharts();
-            renderEditor();
-            buildWeeklyPanel();
-          });
-
-          right.appendChild(input);
-          right.appendChild(box);
-        } else {
-          const stateVal = getCheckStateIn(st, iso, h.id);
-          const box = makeMarkBox({ clickable: !viewOnly, disabled: viewOnly });
-
-          if(stateVal === 0) markBoxApplyState(box, "empty");
-          else if(stateVal === 1) markBoxApplyState(box, "full");   // 100% => green
-          else if(stateVal === -1) markBoxApplyState(box, "zero");  // 0% => red X
-
-          if(!viewOnly){
-            box.addEventListener("click", () => {
-              const selfHabit = state.habits.find(x => x.id === h.id) || h;
-              cycleCheckStateSelf(selfHabit, iso);
-
-              const now = getCheckStateIn(state, iso, selfHabit.id);
-              if(now === 0) markBoxApplyState(box, "empty");
-              else if(now === 1) markBoxApplyState(box, "full");
-              else markBoxApplyState(box, "zero");
-
-              renderTop();
-              repaintCharts();
-              renderTotals();
-              renderAddHelp();
-              buildWeeklyPanel();
-            });
-          }
-
-          right.appendChild(box);
-        }
-
-        row.appendChild(left);
-        row.appendChild(right);
-        habitListEl.appendChild(row);
-      }
+    if(h.type === "numeric" && Number.isFinite(Number(h.goal))){
+      const b2 = document.createElement("span");
+      b2.className = "metaBadge";
+      const halfTxt = (Number.isFinite(Number(h.halfLife)) && Number(h.halfLife) > 0) ? `, Halbwert: ${formatDecimalDE(Number(h.halfLife), 2)}` : "";
+      b2.textContent = `Ziel: ${(h.dir === "MAX") ? "max." : "mind."} ${formatDecimalDE(Number(h.goal), 2)}${halfTxt}`;
+      meta.appendChild(b2);
     }
+
+    if(viewOnly){
+      const lock = document.createElement("span");
+      lock.className = "metaBadge lockBadge";
+      lock.textContent = "Nur Ansicht";
+      meta.appendChild(lock);
+    }
+
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    const right = document.createElement("div");
+    right.className = "habitRight";
+
+    if(h.type === "numeric"){
+      const input = document.createElement("input");
+      input.className = "numericInput";
+      input.type = "text";
+      input.placeholder = "Ist-Wert…";
+      input.inputMode = "decimal";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+
+      const entry = getNumericEntryIn(st, iso, h.id);
+      input.value = (entry.text && entry.text.length)
+        ? entry.text
+        : (entry.value == null ? "" : formatDecimalDE(entry.value, 2));
+
+      enhanceInput(input);
+      input.disabled = viewOnly;
+      input.style.opacity = viewOnly ? ".55" : "1";
+
+      const box = makeMarkBox({ clickable:false, disabled:viewOnly });
+
+      const hasValue = (entry.value != null && !Number.isNaN(entry.value)) || (typeof entry.text === "string" && entry.text.trim().length > 0);
+      if(!hasValue){
+        markBoxApplyState(box, "empty");
+      } else {
+        const w = Number(h.weight||0);
+        const credit = (w > 0) ? numericCreditIn(st, h, iso) : 0;
+        const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
+        markBoxApplyState(box, markStateFromPct(pct));
+      }
+
+      input.addEventListener("input", () => {
+        if(viewOnly) return;
+
+        const isSleep = (h.id === "sleep");
+        setNumericValueForDay(iso, h.id, input.value, isSleep ? { min:0, max:24 } : {});
+
+        const selfHabit = state.habits.find(x => x.id === h.id) || h;
+        const entryNow = getNumericEntryIn(state, iso, selfHabit.id);
+        const hasVal = (entryNow.value != null && !Number.isNaN(entryNow.value)) || (typeof entryNow.text === "string" && entryNow.text.trim().length > 0);
+
+        if(!hasVal){
+          markBoxApplyState(box, "empty");
+        } else {
+          const w = Number(selfHabit.weight||0);
+          const credit = (w > 0) ? numericCreditIn(state, selfHabit, iso) : 0;
+          const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
+          markBoxApplyState(box, markStateFromPct(pct));
+        }
+
+        renderTop();
+        repaintCharts();
+        renderTotals();
+        renderAddHelp();
+        buildWeeklyPanel();
+      });
+
+      input.addEventListener("blur", () => {
+        if(viewOnly) return;
+
+        const n = parseDecimalDE(input.value);
+        const entry2 = getNumericEntrySelf(iso, h.id);
+
+        if(Number.isFinite(n)){
+          let v = n;
+          if(h.id === "sleep") v = clamp(v,0,24);
+          entry2.value = v;
+          entry2.text = formatDecimalDE(v, 2);
+          input.value = entry2.text;
+        } else {
+          entry2.value = null;
+          entry2.text = "";
+          input.value = "";
+        }
+
+        scheduleSaveState();
+
+        renderHabitList();
+        renderTop();
+        repaintCharts();
+        renderEditor();
+        buildWeeklyPanel();
+      });
+
+      right.appendChild(input);
+      right.appendChild(box);
+    } else {
+      const stateVal = getCheckStateIn(st, iso, h.id);
+      const box = makeMarkBox({ clickable: !viewOnly, disabled: viewOnly });
+
+      if(stateVal === 0) markBoxApplyState(box, "empty");
+      else if(stateVal === 1) markBoxApplyState(box, "full");
+      else if(stateVal === -1) markBoxApplyState(box, "zero");
+
+      if(!viewOnly){
+        box.addEventListener("click", () => {
+  const selfHabit = state.habits.find(x => x.id === h.id) || h;
+  cycleCheckStateSelf(selfHabit, iso);
+
+  const now = getCheckStateIn(state, iso, selfHabit.id);
+  if(now === 0) markBoxApplyState(box, "empty");
+  else if(now === 1) markBoxApplyState(box, "full");
+  else markBoxApplyState(box, "zero");
+
+  // Wichtig: Klassen-Header (Aggregat-Mark) neu berechnen
+  renderHabitList();
+
+  renderTop();
+  repaintCharts();
+  renderTotals();
+  renderAddHelp();
+  buildWeeklyPanel();
+});
+      }
+
+      right.appendChild(box);
+    }
+
+    row.appendChild(left);
+    row.appendChild(right);
+    return row;
+  }
+
+    // Drop "ins Leere" => Habit wird ungruppiert (nur wenn Bearbeiten)
+  if(!viewOnly){
+    habitListEl.ondragover = (e) => {
+      // nur aktiv, wenn NICHT ueber einer Klasse
+      const overClass = !!e.target.closest(".classBlock");
+      if(overClass) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    };
+    habitListEl.ondrop = (e) => {
+      const overClass = !!e.target.closest(".classBlock");
+      if(overClass) return; // Klasse handled ihren eigenen Drop
+      e.preventDefault();
+      const hid = e.dataTransfer.getData("text/plain");
+      if(!hid) return;
+      moveHabitToClassSelf(hid, null);
+      renderHabitList();
+      renderTop();
+    };
+  } else {
+    habitListEl.ondragover = null;
+    habitListEl.ondrop = null;
+  }
+
+  // Klassen + (optional) ungruppierte Habits "plain" einsortieren nach Ungruppiert-Rang
+  const uRank = getUngroupedRankSelf(); // null => ganz unten
+  let insertedUngrouped = false;
+
+  function insertUngroupedNow(){
+    if(insertedUngrouped) return;
+    if(!ungroupedHabits.length) return;
+    for(const h of ungroupedHabits){
+      habitListEl.appendChild(renderOneHabit(h)); // exakt wie "keine Klassen" (plain rows)
+    }
+    insertedUngrouped = true;
+  }
+
+  // Klassen rendern
+  for(const c of classes){
+    // Falls Ungruppiert-Rang gesetzt und vor dieser Klasse liegen soll -> hier einfügen
+    if(uRank != null && Number(c.rank || 1) > Number(uRank) && !insertedUngrouped){
+      insertUngroupedNow();
+    }
+
+    const block = document.createElement("div");
+    block.className = "classBlock" + (c.collapsed ? " classCollapsed" : "");
+
+    // Drop auf Klasse (nur wenn Bearbeiten)
+    if(!viewOnly){
+      block.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        block.classList.add("dropHover");
+        e.dataTransfer.dropEffect = "move";
+      });
+      block.addEventListener("dragleave", () => {
+        block.classList.remove("dropHover");
+      });
+      block.addEventListener("drop", (e) => {
+        e.preventDefault();
+        block.classList.remove("dropHover");
+        const hid = e.dataTransfer.getData("text/plain");
+        if(!hid) return;
+        moveHabitToClassSelf(hid, c.id);
+        renderHabitList();
+        renderTop();
+      });
+    }
+
+    const head = document.createElement("div");
+    head.className = "classHeader";
+
+    const title = document.createElement("div");
+    title.className = "classTitle";
+
+    const nm = document.createElement("div");
+    nm.className = "className";
+    nm.textContent = c.name;
+
+    const meta = document.createElement("div");
+    meta.className = "classMeta";
+    meta.textContent = ""; // Rang nur unten im Bearbeiten
+
+    title.appendChild(nm);
+    title.appendChild(meta);
+
+    const rightWrap = document.createElement("div");
+    rightWrap.style.display = "inline-flex";
+    rightWrap.style.alignItems = "center";
+    rightWrap.style.gap = "8px";
+
+    const clsState = classAggregateMarkStateForDay(st, c, iso);
+    const clsBox = makeMarkBox({ clickable:false, disabled:true });
+clsBox.classList.add("classStatus");   // 👈 NUR Klassenstatus
+markBoxApplyState(clsBox, clsState);
+
+    const caret = document.createElement("div");
+    caret.className = "classMeta";
+    caret.textContent = c.collapsed ? "▸" : "▾";
+
+    rightWrap.appendChild(clsBox);
+    rightWrap.appendChild(caret);
+
+    head.appendChild(title);
+    head.appendChild(rightWrap);
+
+    head.addEventListener("click", () => {
+      if(viewOnly) return;
+      toggleClassCollapsedSelf(c.id);
+      renderHabitList();
+    });
+
+    const body = document.createElement("div");
+    body.className = "classBody";
+
+    const inThisClass = sortedHabits.filter(h => (c.habitIds || []).includes(h.id));
+    for(const h of inThisClass){
+      body.appendChild(renderOneHabit(h));
+    }
+
+    block.appendChild(head);
+    block.appendChild(body);
+    habitListEl.appendChild(block);
+  }
+
+  // Ungruppiert am Ende (wenn kein Rang gesetzt oder Rang groesser als alle Klassen)
+  if(!insertedUngrouped){
+    insertUngroupedNow();
+  }
+
+
+// Ungruppiert wird jetzt als Pseudo-Klasse oben gerendert,
+// daher hier NICHTS mehr extra rendern.
+
+}
+
 
     function renderEditor(){
       // Editor shows viewed profile (self or friend), but disabled in friend view
@@ -2829,6 +3525,209 @@
         (Math.abs(sum-100) < 1e-6 ? `OK.` : `Passe Gewichte an oder nutze "Normieren".`);
     }
 
+function renderClassesManager(){
+  // Ungruppiert-Rang nur anzeigen, wenn es mind. eine echte Klasse gibt
+  if(!classesManageWrap) return;
+
+  const st = uiState();
+  const viewOnly = uiIsViewOnly();
+
+  classesManageWrap.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.style.fontWeight = "800";
+  title.style.marginTop = "4px";
+  title.textContent = "Klassen bearbeiten";
+  classesManageWrap.appendChild(title);
+
+  const note = document.createElement("div");
+  note.className = "tiny";
+  note.style.marginTop = "6px";
+  note.textContent = viewOnly ? "Nur Ansicht." : "Name/Rang ändern oder Klasse löschen.";
+  classesManageWrap.appendChild(note);
+
+  const list = document.createElement("div");
+  list.style.display = "flex";
+  list.style.flexDirection = "column";
+  list.style.gap = "10px";
+  list.style.marginTop = "10px";
+  classesManageWrap.appendChild(list);
+
+    const classes = classesSorted(st).filter(c => c.id !== UNGROUPED_CLASS_ID);
+
+  // Zusatz-Zeile: Ungruppiert-Rang (wenn Klassen existieren)
+  if(hasAnyRealClasses(st)){
+    const rowU = document.createElement("div");
+    rowU.style.display = "grid";
+    rowU.style.gridTemplateColumns = "1fr 90px 34px";
+    rowU.style.gap = "10px";
+    rowU.style.alignItems = "center";
+
+    const nameU = document.createElement("input");
+    nameU.className = "field";
+    nameU.value = "Ungruppiert";
+    nameU.disabled = true;
+    nameU.style.opacity = ".55";
+
+    const rankU = document.createElement("input");
+    rankU.className = "field classRankInput rankHelp";
+    rankU.type = "text";
+    rankU.inputMode = "numeric";
+    rankU.placeholder = "Rang";
+    rankU.value = (getUngroupedRankSelf() == null) ? "" : String(getUngroupedRankSelf());
+    rankU.disabled = viewOnly;
+    rankU.style.opacity = viewOnly ? ".55" : "1";
+
+    function commitUngroupedRank(){
+  if(viewOnly) return;
+
+  const raw = String(rankU.value || "").trim();
+  if(raw === ""){
+    setUngroupedRankSelf(null);
+    classHelp.textContent = "";
+    rerenderAll();
+    return;
+  }
+
+  const n = Number(raw);
+  if(!isNaturalInt(n)){
+    classHelp.textContent = "Rang muss eine natürliche Zahl ≥ 1 sein.";
+    rankU.value = (getUngroupedRankSelf() == null) ? "" : String(getUngroupedRankSelf());
+    return;
+  }
+
+  const r = Math.floor(n);
+  if(isClassRankTakenSelf(r, null)){
+    classHelp.textContent = `Rang ${r} ist schon vergeben.`;
+    rankU.value = (getUngroupedRankSelf() == null) ? "" : String(getUngroupedRankSelf());
+    return;
+  }
+
+  setUngroupedRankSelf(r);
+  classHelp.textContent = "";
+  rerenderAll();
+}
+
+
+    enhanceInput(rankU, { onEnter: commitUngroupedRank });
+    rankU.addEventListener("blur", commitUngroupedRank);
+
+    const delU = document.createElement("div");
+    delU.style.textAlign = "center";
+    delU.style.color = "var(--muted)";
+    delU.style.fontSize = "12px";
+    delU.textContent = "—";
+
+    rowU.appendChild(nameU);
+    rowU.appendChild(rankU);
+    rowU.appendChild(delU);
+
+    list.appendChild(rowU);
+  }
+
+  if(!classes.length){
+    const empty = document.createElement("div");
+    empty.className = "note";
+    empty.textContent = "Noch keine Klassen.";
+    list.appendChild(empty);
+    return;
+  }
+
+  for(const c of classes){
+
+    const row = document.createElement("div");
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr 90px 34px";
+    row.style.gap = "10px";
+    row.style.alignItems = "center";
+
+const name = document.createElement("input");
+name.className = "field";
+name.placeholder = "Name der Klasse (z. B. Morgens)";
+name.value = c.name || "";
+name.disabled = viewOnly;
+name.style.opacity = viewOnly ? ".55" : "1";
+
+
+    name.addEventListener("input", () => {
+      if(viewOnly) return;
+      const selfC = (state.classes || []).find(x => x.id === c.id);
+      if(!selfC) return;
+      selfC.name = name.value;
+      scheduleSaveState();
+      renderHabitList();
+    });
+
+const rank = document.createElement("input");
+rank.className = "field classRankInput rankHelp";
+rank.type = "text";
+rank.inputMode = "numeric";
+rank.placeholder = "Rang (z. B. 1)";
+rank.value = (c.rank == null ? "" : String(Number(c.rank)));
+rank.disabled = viewOnly;
+rank.style.opacity = viewOnly ? ".55" : "1";
+
+function commitClassRank(){
+  if(viewOnly) return;
+
+  const raw = String(rank.value || "").trim();
+  const n = Number(raw);
+
+  if(!isNaturalInt(n)){
+    classHelp.textContent = "Rang muss eine natürliche Zahl ≥ 1 sein.";
+    rank.value = (c.rank == null ? "" : String(Number(c.rank)));
+    return;
+  }
+
+  const r = Math.floor(n);
+  if(isClassRankTakenSelf(r, c.id)){
+    classHelp.textContent = `Rang ${r} ist schon vergeben.`;
+    rank.value = (c.rank == null ? "" : String(Number(c.rank)));
+    return;
+  }
+
+  const selfC = (state.classes || []).find(x => x.id === c.id);
+  if(!selfC) return;
+
+  selfC.rank = r;
+  classHelp.textContent = "";
+  scheduleSaveState();
+  renderHabitList();
+  rerenderAll();
+}
+
+enhanceInput(rank, { onEnter: commitClassRank });
+rank.addEventListener("blur", commitClassRank);
+
+
+    const del = document.createElement("button");
+    del.className = "iconX";
+    del.type = "button";
+    del.textContent = "×";
+    del.disabled = viewOnly;
+    del.title = "Klasse löschen";
+    del.style.opacity = viewOnly ? ".55" : "1";
+
+    del.addEventListener("click", () => {
+  if(viewOnly) return;
+
+  // Remove class (Habits bleiben ungruppiert)
+  state.classes = (state.classes || []).filter(x => x.id !== c.id);
+
+  scheduleSaveState();
+  renderClassesManager();
+  renderHabitList();
+});
+
+
+    row.appendChild(name);
+    row.appendChild(rank);
+    row.appendChild(del);
+
+    list.appendChild(row);
+  }
+}
+
     function addHabit(){
       if(uiIsViewOnly()) return;
 
@@ -2878,6 +3777,45 @@
     enhanceInput(newHabitWeight, { onEnter: addHabit });
     enhanceInput(newHabitGoal, { onEnter: addHabit });
 
+function addClass(){
+  if(uiIsViewOnly()) return;
+
+  const name = (newClassName.value || "").trim();
+  const rank = Number(newClassRank.value);
+
+  if(!name){
+    classHelp.textContent = "Bitte einen Klassennamen eingeben.";
+    return;
+  }
+  if(!isNaturalInt(rank)){
+    classHelp.textContent = "Rang muss eine natürliche Zahl ≥ 1 sein.";
+    return;
+  }
+  if(isClassRankTakenSelf(rank, null)){
+    classHelp.textContent = `Rang ${Math.floor(rank)} ist schon vergeben.`;
+    return;
+  }
+
+  state.classes.push({
+    id: cryptoId(),
+    name,
+    rank: Math.floor(rank),
+    collapsed: false,
+    habitIds: []
+  });
+
+  newClassName.value = "";
+  newClassRank.value = "";         // leer statt automatisch "1"
+  classHelp.textContent = "";
+
+  scheduleSaveState();
+  rerenderAll();
+}
+
+
+addClassBtn.addEventListener("click", addClass);
+enhanceInput(newClassName, { onEnter: addClass });
+enhanceInput(newClassRank, { onEnter: addClass });
     normalizeBtn.addEventListener("click", () => {
       if(uiIsViewOnly()) return;
 
@@ -2927,6 +3865,7 @@
       renderTop();
       renderTotals();
       renderAddHelp();
+	  renderClassesManager();
       repaintCharts();
       buildWeeklyPanel();
       renderEditor();
