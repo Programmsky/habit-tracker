@@ -748,20 +748,26 @@
 
     /* MARK (match old check style) */
     .mark{
-      width:18px;
-      height:18px;
-      border-radius:4px;
-      border:1px solid rgba(35,48,90,.75);
-      background: transparent;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:900;
-      line-height:1;
-      user-select:none;
-      flex: 0 0 auto;
-      font-size:14px;
-    }
+  width:18px;
+  height:18px;
+  border-radius:4px;
+  border:1px solid rgba(35,48,90,.75);
+  background: transparent;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+  line-height:1;
+  user-select:none;
+  flex: 0 0 auto;
+  font-size:14px;
+}
+
+/* HABIT: offen → heller Rahmen (wie Klassenstatus-Look), aber nur funktional fürs Habit */
+.mark.empty:not(.classStatus){
+  border-color: rgba(230,235,255,.70); /* hell, neutral/weißlich */
+}
+
     .mark.clickable{ cursor:pointer; }
     .mark.disabled{ opacity:.55; cursor:default; }
 
@@ -2169,15 +2175,21 @@ function classAggregateMarkStateForDay(st, cls, iso){
   const allZero = states.every(x => x.s === "zero");
   if(allZero) return "zero";
 
-      // Mischfall nur aus full + zero:
-  // NEU: nach ANZAHL (nicht nach Gewicht), weil es um "verkackt vs geschafft" pro Habit geht
-    let nFull = 0;
-  let nZero = 0;
-  for(const x of states){
-    if(x.s === "full") nFull += 1;
-    else if(x.s === "zero") nZero += 1;
-  }
-  return (nZero >= nFull) ? "zero" : "full";
+            // Mischfall nur aus full + zero:
+      // NEU: Schwelle nach "innerhalb der Klasse maximal möglichen Prozentpunkten" (Gewichtssumme)
+      // Regel: nur hier (ohne partial). Wenn > 60% der Klassenpunkte geholt -> full, sonst zero.
+      let maxPts = 0;
+      let gotPts = 0;
+
+      for(const x of states){
+        const w = Number(x.h?.weight || 0);
+        if(w <= 0) continue;
+        maxPts += w;
+        if(x.s === "full") gotPts += w; // full zählt als volle Punkte, zero als 0
+      }
+
+      const frac = (maxPts > 0) ? (gotPts / maxPts) : 0;
+      return (frac > 0.70) ? "full" : "zero";
 }
 
 function removeHabitFromAllClassesSelf(habitId){
