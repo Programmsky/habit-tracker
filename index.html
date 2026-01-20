@@ -2086,6 +2086,14 @@ function toggleClassCollapsedSelf(classId){
   scheduleSaveState();
 }
 
+function toggleClassCollapsedViewOnly(st, classId){
+  if(!st || !Array.isArray(st.classes)) return;
+  const c = st.classes.find(x => x.id === classId);
+  if(!c) return;
+  c.collapsed = !c.collapsed;
+}
+
+
 function habitMarkStateForDay(st, habit, iso){
   // returns: "empty" | "full" | "partial" | "zero"
   if(habit.type !== "numeric"){
@@ -3277,7 +3285,11 @@ markBoxApplyState(clsBox, clsState);
     head.appendChild(rightWrap);
 
     head.addEventListener("click", () => {
-      if(viewOnly) return;
+      if(viewOnly){
+        toggleClassCollapsedViewOnly(uiState(), c.id);
+        renderHabitList();
+        return;
+      }
       toggleClassCollapsedSelf(c.id);
       renderHabitList();
     });
