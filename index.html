@@ -748,63 +748,35 @@
 
     /* MARK (match old check style) */
     .mark{
-  width:18px;
-  height:18px;
-  border-radius:4px;
-  border:1px solid rgba(35,48,90,.75);
-  background: transparent;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:900;
-  line-height:1;
-  user-select:none;
-  flex: 0 0 auto;
-  font-size:14px;
-}
-
-/* HABIT: offen → heller Rahmen (wie Klassenstatus-Look), aber nur funktional fürs Habit */
-.mark.empty:not(.classStatus){
-  border-color: rgba(230,235,255,.70); /* hell, neutral/weißlich */
-}
-
+      width:18px;
+      height:18px;
+      border-radius:4px;
+      border:1px solid rgba(35,48,90,.75);
+      background: transparent;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:900;
+      line-height:1;
+      user-select:none;
+      flex: 0 0 auto;
+      font-size:14px;
+    }
     .mark.clickable{ cursor:pointer; }
     .mark.disabled{ opacity:.55; cursor:default; }
 
-    /* HABITS: unverändert */
+    /* HABITS + KLASSENSTATUS: identische Mark-Optik, kein Extra-Icon */
+/* EMPTY (Habit + Klasse): transparenter Hintergrund, heller Rand */
+/* EMPTY = offen (Habit + Klasse): identischer Look */
+/* EMPTY = offen (Habit + Klasse): exakt gleicher, heller Look */
 .mark.empty{
   background: transparent;
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10);
   color: transparent;
+  opacity: 1;          /* wichtig: Parent-Dämpfung neutralisieren */
+  filter: none;        /* falls im Class-Header gesetzt */
 }
-
-/* Klassenstatus soll GENAU wie Habits aussehen */
-.mark.classStatus{
-  background: inherit;
-  border-color: inherit;
-  color: inherit;
-  box-shadow: inherit;
-}
-
-/* Kreis nur für Klassenstatus */
-/* Test: OFFEN = gelbes, leeres Feld (kein Symbol) */
-.mark.empty.classStatus::after{
-  content: "";
-}
-
-.mark.empty.classStatus{
-  position: relative;
-}
-
-/* Option B (testen): gelbes leeres Feld -> KEIN Kreis anzeigen */
-.mark.empty.classStatus::after{
-  content: "";
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 
 
     .mark.full{
@@ -1202,20 +1174,20 @@ const defaultState = () => ({
     { id: cryptoId(), name: "Bewegung", weight: 35, type: "check" },
     { id: cryptoId(), name: "Lesen", weight: 35, type: "check" },
   ],
-  classes: [
-    // Beispiel (optional leer lassen):
-    // { id: cryptoId(), name: "Morgens", rank: 1, collapsed: false, habitIds: [] }
-  ],
-  classes: [],
+  classes: [], // keine Klassen per Default
   dayData: {},
   selectedDate: todayISO(),
   viewOnly: false,
 });
 
 
-
     function cryptoId(){ return "h_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16); }
     function todayISO(){ return toISODate(new Date()); }
+	function yesterdayISO(){
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return toISODate(d);
+}
     function toISODate(d){
       const y = d.getFullYear();
       const m = String(d.getMonth()+1).padStart(2,"0");
@@ -1263,6 +1235,40 @@ const defaultState = () => ({
     function saveCompareSelected(){
       try{ localStorage.setItem(LS_COMPARE_KEY, JSON.stringify(Array.from(compareSelected))); }catch{}
     }
+
+const LS_COMPARE_COLORS_KEY = "ht_compare_colors_v1";
+function loadCompareColors(){
+  try{
+    const raw = localStorage.getItem(LS_COMPARE_COLORS_KEY);
+    if(!raw) return {};
+    const obj = JSON.parse(raw);
+    if(!obj || typeof obj !== "object") return {};
+    return obj;
+  }catch{
+    return {};
+  }
+}
+function saveCompareColors(){
+  try{ localStorage.setItem(LS_COMPARE_COLORS_KEY, JSON.stringify(compareColorPrefs || {})); }catch{}
+}
+function getPreferredCompareColor(userId){
+  const c = compareColorPrefs?.[userId];
+  return (typeof c === "string" && c.trim().length) ? c.trim() : null;
+}
+
+const LS_COMPARE_SHOW_SELF_KEY = "ht_compare_show_self_v1";
+function loadCompareShowSelf(){
+  try{
+    const raw = localStorage.getItem(LS_COMPARE_SHOW_SELF_KEY);
+    if(raw == null) return true; // Default: Self sichtbar
+    return raw === "1";
+  }catch{
+    return true;
+  }
+}
+function saveCompareShowSelf(){
+  try{ localStorage.setItem(LS_COMPARE_SHOW_SELF_KEY, compareShowSelf ? "1" : "0"); }catch{}
+}
 
     function migrateFromOlder(st){
       if(!st || typeof st !== "object") return defaultState();
@@ -1348,11 +1354,26 @@ st.classes = st.classes.map(c => ({
     let inspectedState = null;  // friend state
 
     function uiState(){ return inspectedState || state; }
-    function uiIsViewOnly(){ return !!inspected || (viewingUserId !== currentUser?.id); }
+    function isEditableDateISO(iso){
+  const t = todayISO();
+  const y = yesterdayISO();
+  return (iso === t) || (iso === y);
+}
+
+function uiIsViewOnly(){
+  // Freunde: immer nur Ansicht
+  if(!!inspected || (viewingUserId !== currentUser?.id)) return true;
+
+  // Selbst: nur heute + gestern bearbeitbar
+  const iso = uiState()?.selectedDate || todayISO();
+  return !isEditableDateISO(iso);
+}
 
     let friendsCache = [];
     let compareSelected = loadCompareSelected();
-    window.compareMeta = [];
+let compareColorPrefs = loadCompareColors(); // user_id -> "#RRGGBB" (auch self möglich)
+let compareShowSelf = loadCompareShowSelf(); // self an/aus
+window.compareMeta = [];
 
     // state cache for weekly stats / compare rendering
     const compareStateCache = new Map(); // user_id -> state
@@ -1594,7 +1615,7 @@ st.classes = st.classes.map(c => ({
     authPass.addEventListener("keydown", (e) => { if(e.key === "Enter") handleAuthSubmit(); });
     authEmail.addEventListener("keydown", (e) => { if(e.key === "Enter") handleAuthSubmit(); });
 
-    async function logoutAll(){
+        async function logoutAll(){
       await sb.auth.signOut();
       currentUser = null;
       profileRow = null;
@@ -1608,6 +1629,7 @@ st.classes = st.classes.map(c => ({
       compareStateCache.clear();
       compareLabelCache.clear();
       compareColorCache.clear();
+      compareShowSelf = loadCompareShowSelf();
       destroyCharts();
       showAuth();
     }
@@ -1635,13 +1657,161 @@ st.classes = st.classes.map(c => ({
 
     function buildCompareMenu(){
       compareList.innerHTML = "";
+	  
+	        // SELF row (an/aus + Farbe)
+      if(currentUser){
+        const selfRow = document.createElement("div");
+        selfRow.className = "compareItem";
 
-      if(!friendsCache.length){
+        const left = document.createElement("div");
+        left.className = "compareItemLeft";
+
+        const topRow = document.createElement("div");
+        topRow.style.display = "flex";
+        topRow.style.alignItems = "center";
+        topRow.style.justifyContent = "space-between";
+        topRow.style.gap = "10px";
+
+        const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
+
+        const nm = document.createElement("div");
+        nm.className = "compareItemName";
+        nm.textContent = selfLabel;
+
+        const colorBtn = document.createElement("button");
+        colorBtn.type = "button";
+        colorBtn.className = "btn ghost";
+        colorBtn.style.padding = "6px 8px";
+        colorBtn.style.borderRadius = "999px";
+        colorBtn.style.display = "inline-flex";
+        colorBtn.style.alignItems = "center";
+        colorBtn.style.gap = "8px";
+
+        const sw = document.createElement("div");
+        sw.style.width = "14px";
+        sw.style.height = "14px";
+        sw.style.borderRadius = "4px";
+        sw.style.border = "1px solid rgba(255,255,255,.22)";
+
+        const labelTxt = document.createElement("span");
+        labelTxt.className = "tiny";
+        labelTxt.style.color = "var(--muted)";
+        labelTxt.textContent = "Farbe";
+
+        const SELF_DEFAULT = "#7AA2FF"; // Standardblau
+        sw.style.background = (getPreferredCompareColor(currentUser.id) || SELF_DEFAULT);
+
+        colorBtn.appendChild(sw);
+        colorBtn.appendChild(labelTxt);
+
+        const palette = document.createElement("div");
+        palette.className = "hidden";
+        palette.style.marginTop = "8px";
+        palette.style.display = "grid";
+        palette.style.gridTemplateColumns = "repeat(5, 22px)";
+        palette.style.gap = "8px";
+        palette.style.justifyContent = "flex-start";
+
+                const COLORS = [
+          // ===== UI / Classic Palette =====
+          { name:"Standard_Blue_UI", hex:"#7AA2FF" },
+          { name:"Green_UI", hex:"#39D98A" },
+          { name:"Yellow_UI", hex:"#FFCC66" },
+          { name:"Red_UI", hex:"#FF6B6B" },
+          { name:"Cyan_UI", hex:"#4DCFFF" },
+          { name:"Violet_UI", hex:"#C084FC" },
+          { name:"Orange_UI", hex:"#FFA657" },
+          { name:"Pink_UI", hex:"#FF85C2" },
+          { name:"Teal_UI", hex:"#2DD4BF" },
+          { name:"SteelBlue_UI", hex:"#5B7CFA" },
+
+          // ===== Sky / Original-nah Palette =====
+          { name:"Red_Sky", hex:"#FF0000" },
+          { name:"Orange_Sky", hex:"#FF7F00" },
+          { name:"Yellow_Sky", hex:"#FFFF00" },
+          { name:"Green_Sky", hex:"#00FF00" },
+          { name:"DarkGreen_Sky", hex:"#006400" },
+          { name:"Cyan_Sky", hex:"#00FFFF" },
+          { name:"Blue_Sky", hex:"#0000FF" },
+          { name:"Violet_Sky", hex:"#8000FF" },
+          { name:"Magenta_Sky", hex:"#FF00FF" },
+        ];
+
+
+        for(const c of COLORS){
+          const b = document.createElement("button");
+          b.type = "button";
+          b.title = c.name;
+          b.style.width = "22px";
+          b.style.height = "22px";
+          b.style.borderRadius = "6px";
+          b.style.border = "1px solid rgba(255,255,255,.22)";
+          b.style.background = c.hex;
+          b.style.cursor = "pointer";
+
+          b.addEventListener("click", async () => {
+            compareColorPrefs[currentUser.id] = c.hex;
+            saveCompareColors();
+            sw.style.background = c.hex;
+
+            await refreshCompareDatasets();
+            buildCompareMenu();
+          });
+
+          palette.appendChild(b);
+        }
+
+        colorBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          palette.classList.toggle("hidden");
+        });
+
+        topRow.appendChild(nm);
+        topRow.appendChild(colorBtn);
+
+        const meta = document.createElement("div");
+        meta.className = "tiny";
+        meta.textContent = "Ich (eigener Graph)";
+
+        left.appendChild(topRow);
+        left.appendChild(meta);
+        left.appendChild(palette);
+
+        const chkWrap = document.createElement("label");
+        chkWrap.style.display = "inline-flex";
+        chkWrap.style.alignItems = "center";
+        chkWrap.style.gap = "8px";
+        chkWrap.style.cursor = "pointer";
+        chkWrap.style.userSelect = "none";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!compareShowSelf;
+        cb.addEventListener("change", async () => {
+          compareShowSelf = !!cb.checked;
+          saveCompareShowSelf();
+          await refreshCompareDatasets();
+        });
+
+        const t = document.createElement("span");
+        t.textContent = "anzeigen";
+        t.style.color = "var(--text)";
+
+        chkWrap.appendChild(cb);
+        chkWrap.appendChild(t);
+
+        selfRow.appendChild(left);
+        selfRow.appendChild(chkWrap);
+        compareList.appendChild(selfRow);
+      }
+
+          if(!friendsCache.length){
         const n = document.createElement("div");
         n.className = "note";
         n.textContent = "Noch keine Freunde verbunden.";
         compareList.appendChild(n);
-        return;
+        // kein return: Self-Row bleibt sichtbar
       }
 
       for(const f of friendsCache){
@@ -1651,16 +1821,120 @@ st.classes = st.classes.map(c => ({
         const left = document.createElement("div");
         left.className = "compareItemLeft";
 
+                const topRow = document.createElement("div");
+        topRow.style.display = "flex";
+        topRow.style.alignItems = "center";
+        topRow.style.justifyContent = "space-between";
+        topRow.style.gap = "10px";
+
         const nm = document.createElement("div");
         nm.className = "compareItemName";
         nm.textContent = f.display_name || (String(f.user_id).slice(0,8) + "…");
+
+        // Farb-Swatch (aktueller Status) + Palette
+        const colorBtn = document.createElement("button");
+        colorBtn.type = "button";
+        colorBtn.className = "btn ghost";
+        colorBtn.style.padding = "6px 8px";
+        colorBtn.style.borderRadius = "999px";
+        colorBtn.style.display = "inline-flex";
+        colorBtn.style.alignItems = "center";
+        colorBtn.style.gap = "8px";
+
+        const sw = document.createElement("div");
+        sw.style.width = "14px";
+        sw.style.height = "14px";
+        sw.style.borderRadius = "4px";
+        sw.style.border = "1px solid rgba(255,255,255,.22)";
+
+        const labelTxt = document.createElement("span");
+        labelTxt.className = "tiny";
+        labelTxt.style.color = "var(--muted)";
+        labelTxt.textContent = "Farbe";
+
+        function currentColorFor(uid){
+          return getPreferredCompareColor(uid) || compareColorCache.get(uid) || "rgba(122,162,255,.95)";
+        }
+        sw.style.background = currentColorFor(f.user_id);
+
+        colorBtn.appendChild(sw);
+        colorBtn.appendChild(labelTxt);
+
+        const palette = document.createElement("div");
+        palette.className = "hidden";
+        palette.style.marginTop = "8px";
+        palette.style.display = "grid";
+        palette.style.gridTemplateColumns = "repeat(5, 22px)";
+        palette.style.gap = "8px";
+        palette.style.justifyContent = "flex-start";
+
+                const COLORS = [
+          // ===== UI / Classic Palette =====
+          { name:"Standard_Blue_UI", hex:"#7AA2FF" },
+          { name:"Green_UI", hex:"#39D98A" },
+          { name:"Yellow_UI", hex:"#FFCC66" },
+          { name:"Red_UI", hex:"#FF6B6B" },
+          { name:"Cyan_UI", hex:"#4DCFFF" },
+          { name:"Violet_UI", hex:"#C084FC" },
+          { name:"Orange_UI", hex:"#FFA657" },
+          { name:"Pink_UI", hex:"#FF85C2" },
+          { name:"Teal_UI", hex:"#2DD4BF" },
+          { name:"SteelBlue_UI", hex:"#5B7CFA" },
+
+          // ===== Sky / Original-nah Palette =====
+          { name:"Red_Sky", hex:"#FF0000" },
+          { name:"Orange_Sky", hex:"#FF7F00" },
+          { name:"Yellow_Sky", hex:"#FFFF00" },
+          { name:"Green_Sky", hex:"#00FF00" },
+          { name:"DarkGreen_Sky", hex:"#006400" },
+          { name:"Cyan_Sky", hex:"#00FFFF" },
+          { name:"Blue_Sky", hex:"#0000FF" },
+          { name:"Violet_Sky", hex:"#8000FF" },
+          { name:"Magenta_Sky", hex:"#FF00FF" },
+        ];
+
+
+        for(const c of COLORS){
+          const b = document.createElement("button");
+          b.type = "button";
+          b.title = c.name;
+          b.style.width = "22px";
+          b.style.height = "22px";
+          b.style.borderRadius = "6px";
+          b.style.border = "1px solid rgba(255,255,255,.22)";
+          b.style.background = c.hex;
+          b.style.cursor = "pointer";
+
+          b.addEventListener("click", async () => {
+            compareColorPrefs[f.user_id] = c.hex;
+            saveCompareColors();
+
+            sw.style.background = c.hex;
+
+            // Farben sofort überall übernehmen (Graph + Ø Woche + Best-of)
+            await refreshCompareDatasets();
+            buildCompareMenu();
+          });
+
+          palette.appendChild(b);
+        }
+
+        colorBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          palette.classList.toggle("hidden");
+        });
+
+        topRow.appendChild(nm);
+        topRow.appendChild(colorBtn);
 
         const meta = document.createElement("div");
         meta.className = "tiny";
         meta.textContent = `user_id: ${String(f.user_id).slice(0,8)}…`;
 
-        left.appendChild(nm);
+        left.appendChild(topRow);
         left.appendChild(meta);
+        left.appendChild(palette);
 
         const chkWrap = document.createElement("label");
         chkWrap.style.display = "inline-flex";
@@ -2175,22 +2449,24 @@ function classAggregateMarkStateForDay(st, cls, iso){
   const allZero = states.every(x => x.s === "zero");
   if(allZero) return "zero";
 
-            // Mischfall nur aus full + zero:
-      // NEU: Schwelle nach "innerhalb der Klasse maximal möglichen Prozentpunkten" (Gewichtssumme)
-      // Regel: nur hier (ohne partial). Wenn > 60% der Klassenpunkte geholt -> full, sonst zero.
-      let maxPts = 0;
-      let gotPts = 0;
+  // 5) Mischfall (nur full + zero, kein partial):
+  // Summe der maximal möglichen Klassen-Gewichtspunkte (Habit-Gewichte).
+  // Wenn > 60% erreicht -> full, sonst -> zero.
+  let maxPts = 0;
+  let gotPts = 0;
 
-      for(const x of states){
-        const w = Number(x.h?.weight || 0);
-        if(w <= 0) continue;
-        maxPts += w;
-        if(x.s === "full") gotPts += w; // full zählt als volle Punkte, zero als 0
-      }
+  for(const x of states){
+    const w = Number(x.h?.weight || 0);
+    if(!(w > 0)) continue;
 
-      const frac = (maxPts > 0) ? (gotPts / maxPts) : 0;
-      return (frac > 0.70) ? "full" : "zero";
+    maxPts += w;
+    if(x.s === "full") gotPts += w;
+  }
+
+  if(maxPts <= 0) return "empty"; // keine sinnvollen Gewichte -> neutral
+  return ((gotPts / maxPts) > 0.60) ? "full" : "zero";
 }
+
 
 function removeHabitFromAllClassesSelf(habitId){
   if(uiIsViewOnly()) return;
@@ -2544,7 +2820,7 @@ document.addEventListener("dragend", () => {
         type: "line",
         data: { labels: [], datasets: [
           { label:"Schlaf (h)", data:[], borderWidth:2, pointRadius:4, pointHoverRadius:7, pointHitRadius:16, tension:0.25, spanGaps:true, borderColor:"rgba(122,162,255,.95)" },
-          { label:"Ziel (h)", data:[], borderWidth:2, pointRadius:0, tension:0, spanGaps:true, borderDash:[6,6], borderColor:"rgba(255,107,107,.95)" }
+          { label:"Ziel (h)", data:[], borderWidth:2, pointRadius:0, tension:0, spanGaps:true, borderDash:[6,6], borderColor:"rgba(255,255,255,.45)" }
         ]},
         options: {
           responsive:true,
@@ -2555,6 +2831,14 @@ document.addEventListener("dragend", () => {
           scales:{ y:{ suggestedMin:0, suggestedMax:10, ticks:{ callback:(v)=> `${v} h` } } }
         }
       });
+
+      // Schlaf-Graph: Farbe wie Self (Compare-Farbwahl), fallback = Standardblau
+      if(currentUser){
+        const selfDefault = "rgba(122,162,255,.95)";
+        const selfPref = getPreferredCompareColor(currentUser.id);
+        sleepChart.data.datasets[0].borderColor = selfPref || selfDefault;
+        sleepChart.data.datasets[0].backgroundColor = selfPref || selfDefault;
+      }
 
       repaintCharts();
     }
@@ -2576,22 +2860,31 @@ document.addEventListener("dragend", () => {
       const datasets = [];
       window.compareMeta = [];
 
-      // 0) SELF always
-      const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
-      const selfColor = "rgba(122,162,255,.95)";
-      const selfSeries = buildMonthSeriesFor(state, monthISO);
+            // 0) SELF optional (an/aus per Compare-Menü)
+      if(compareShowSelf){
+        const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
+        const selfDefault = "rgba(122,162,255,.95)"; // Standardblau (auch sonst im UI genutzt)
+        const selfPref = getPreferredCompareColor(currentUser.id);
+        const selfColor = selfPref || selfDefault;
 
-      datasets.push(baseScoreDataset(selfLabel, selfSeries.scores, selfColor));
-      window.compareMeta.push({ kind:"self", user_id: currentUser.id, display_name: selfLabel });
-      compareStateCache.set(currentUser.id, state);
-      compareLabelCache.set(currentUser.id, selfLabel);
-      compareColorCache.set(currentUser.id, selfColor);
+        const selfSeries = buildMonthSeriesFor(state, monthISO);
+
+        datasets.push(baseScoreDataset(selfLabel, selfSeries.scores, selfColor));
+        window.compareMeta.push({ kind:"self", user_id: currentUser.id, display_name: selfLabel });
+
+        compareStateCache.set(currentUser.id, state);
+        compareLabelCache.set(currentUser.id, selfLabel);
+        compareColorCache.set(currentUser.id, selfColor);
+      }
 
       // 1) INSPECTED always shown too (if exists) => requirement: "immer unsere BEIDEN Graphen"
       let colorIdx = 0;
-      if(inspected && inspectedState){
+            if(inspected && inspectedState){
         colorIdx += 1;
-        const col = rgbaFromIndex(colorIdx);
+        const autoCol = rgbaFromIndex(colorIdx);
+        const prefCol = getPreferredCompareColor(inspected.user_id);
+        const col = prefCol || autoCol;
+
         const label = inspected.display_name || "Freund";
         const s = buildMonthSeriesFor(inspectedState, monthISO);
 
@@ -2623,8 +2916,11 @@ document.addEventListener("dragend", () => {
             const st2 = migrateFromOlder(data.state);
             st2.viewOnly = true;
 
-            colorIdx += 1;
-            const col = rgbaFromIndex(colorIdx);
+                        colorIdx += 1;
+            const autoCol = rgbaFromIndex(colorIdx);
+            const prefCol = getPreferredCompareColor(uid);
+            const col = prefCol || autoCol;
+
             const label = data.display_name || (String(uid).slice(0,8) + "…");
             const s2 = buildMonthSeriesFor(st2, monthISO);
 
@@ -2640,9 +2936,77 @@ document.addEventListener("dragend", () => {
         }
       }
 
-      scoreChart.data.labels = baseSeriesForLabels.labels;
+            scoreChart.data.labels = baseSeriesForLabels.labels;
       scoreChart.data.datasets = datasets;
       scoreChart.update();
+
+      // Sleep-Chart soll SOFORT die Self-Farbe übernehmen (ohne Refresh)
+           if(sleepChart){
+        // Farbe abhängig davon, wessen Profil gerade angezeigt wird
+        let uid = null;
+        let fallback = "rgba(122,162,255,.95)";
+		
+		               function contrastFor(col){
+          // Hintergrund ist dunkel -> Ziel-Linie soll IMMER hell sein,
+          // aber farblich kontrastierend zur Graphenfarbe (ohne Neon).
+          try{
+            let r=122, g=162, b=255; // fallback: Standardblau
+            if(typeof col === "string" && col.startsWith("rgba")){
+              const m = col.match(/rgba\((\d+),\s*(\d+),\s*(\d+)/);
+              if(m){ r=+m[1]; g=+m[2]; b=+m[3]; }
+            }else if(typeof col === "string" && col.startsWith("#")){
+              r = parseInt(col.slice(1,3),16);
+              g = parseInt(col.slice(3,5),16);
+              b = parseInt(col.slice(5,7),16);
+            }
+
+            // Kontrastfarbe = invertiert (komplementär), dann stark aufgehellt und entsättigt (pastell)
+            let cr = 255 - r;
+            let cg = 255 - g;
+            let cb = 255 - b;
+
+            // Aufhellen Richtung Weiß (70%) -> immer hell, nicht stechend
+            const t = 0.70;
+            cr = Math.round(cr + (255 - cr) * t);
+            cg = Math.round(cg + (255 - cg) * t);
+            cb = Math.round(cb + (255 - cb) * t);
+
+            // Leicht entsättigen Richtung Grau (25%) -> weniger "neon"
+            const gray = Math.round((cr + cg + cb) / 3);
+            const d = 0.25;
+            cr = Math.round(cr * (1 - d) + gray * d);
+            cg = Math.round(cg * (1 - d) + gray * d);
+            cb = Math.round(cb * (1 - d) + gray * d);
+
+            // Alpha moderat -> ruhig
+            return `rgba(${cr},${cg},${cb},.55)`;
+          }catch{
+            return "rgba(255,255,255,.45)";
+          }
+        }
+
+        if(viewingUserId && viewingUserId !== currentUser?.id){
+          // Freund wird besucht
+          uid = viewingUserId;
+        }else if(currentUser){
+          // Self
+          uid = currentUser.id;
+        }
+
+        if(uid){
+                   const pref = getPreferredCompareColor(uid);
+          const col = pref || fallback;
+
+          sleepChart.data.datasets[0].borderColor = col;
+          sleepChart.data.datasets[0].backgroundColor = col;
+
+          // Ziel-Linie: automatisch kontrastierend zur Graph-Farbe
+          const goalCol = contrastFor(col);
+          sleepChart.data.datasets[1].borderColor = goalCol;
+
+          sleepChart.update();
+        }
+      }
 
       buildWeeklyPanel();
     }
@@ -2658,9 +3022,19 @@ document.addEventListener("dragend", () => {
 
       const series = buildMonthSeriesFor(stView, stView.selectedDate);
 
-      sleepChart.data.labels = series.labels;
+          sleepChart.data.labels = series.labels;
       sleepChart.data.datasets[0].data = series.sleeps;
       sleepChart.data.datasets[1].data = series.goals;
+
+      // Schlaf-Graph: Farbe wie Self (Compare-Farbwahl), fallback = Standardblau
+      if(currentUser){
+        const selfDefault = "rgba(122,162,255,.95)";
+        const selfPref = getPreferredCompareColor(currentUser.id);
+        const col = selfPref || selfDefault;
+        sleepChart.data.datasets[0].borderColor = col;
+        sleepChart.data.datasets[0].backgroundColor = col;
+      }
+
       sleepChart.update();
 
       refreshCompareDatasets();
@@ -2722,20 +3096,38 @@ const lastDayIdx = (() => {
 })();
 
 
-      // represented users = datasets in chart
+            // represented users = compareMeta (self + inspected + compareSelected) — stabil, ohne Duplikate
       const users = [];
-      if(scoreChart?.data?.datasets?.length){
-        for(let i=0;i<scoreChart.data.datasets.length;i++){
-          const meta = window.compareMeta?.[i];
-          const uid = meta?.user_id;
-          if(!uid) continue;
-          const label = meta.display_name || scoreChart.data.datasets[i].label || (String(uid).slice(0,8) + "…");
-          const color = scoreChart.data.datasets[i].borderColor || "rgba(122,162,255,.95)";
-          const stU = compareStateCache.get(uid);
-          if(!stU) continue;
-          users.push({ user_id: uid, label, color, state: stU });
-        }
+      const seen = new Set();
+
+      const metas = Array.isArray(window.compareMeta) ? window.compareMeta : [];
+      for(let i=0; i<metas.length; i++){
+        const meta = metas[i];
+        const uid = meta?.user_id;
+        if(!uid) continue;
+
+        // State muss existieren, sonst nicht aufnehmen (und auch NICHT als "seen" markieren)
+        const stU = compareStateCache.get(uid);
+        if(!stU) continue;
+
+        if(seen.has(uid)) continue;
+        seen.add(uid);
+
+        const label =
+          compareLabelCache.get(uid) ||
+          meta.display_name ||
+          (scoreChart?.data?.datasets?.[i]?.label) ||
+          (String(uid).slice(0,8) + "…");
+
+        const color =
+          compareColorCache.get(uid) ||
+          (scoreChart?.data?.datasets?.[i]?.borderColor) ||
+          "rgba(122,162,255,.95)";
+
+        users.push({ user_id: uid, label, color, state: stU });
       }
+
+
 
       // averages row
       for(const u of users){
@@ -2750,8 +3142,34 @@ const lastDayIdx = (() => {
         }
         const avg = (n > 0) ? Math.round((sum/n)) : 0;
 
-        const chip = document.createElement("div");
+                const chip = document.createElement("div");
         chip.className = "avgChip";
+
+        // Klickbar wie Punkte im Graph: führt zu User (heutiger Tag)
+        chip.style.cursor = "pointer";
+        chip.style.userSelect = "none";
+        chip.title = "Zum Profil (heutiger Tag)";
+
+        chip.addEventListener("click", async () => {
+          try{
+            // Selbst: zurück zu mir
+            if(u.user_id === currentUser?.id){
+              await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
+              showApp();
+              setSelectedDate(todayISO(), { viewOnly:false });
+              await refreshCompareDatasets();
+              return;
+            }
+
+            // Freund: besuchen (nur Ansicht)
+            await loadProfileForView(u.user_id, u.label, { viewOnly:true });
+            showApp();
+            setSelectedDate(todayISO(), { viewOnly:true });
+            await refreshCompareDatasets();
+          }catch(e){
+            alert(e?.message ? String(e.message) : "Fehler beim Laden.");
+          }
+        });
 
         const dot = document.createElement("div");
         dot.className = "dot";
@@ -2869,8 +3287,10 @@ const lastDayIdx = (() => {
 
       datePicker.value = iso;
 
-      if(st === state){
-        state.viewOnly = !!viewOnly || (viewingUserId !== currentUser?.id);
+           if(st === state){
+        // Selbst: zusätzlich harte Regel -> nur heute/gestern editierbar
+        const dateLocked = !isEditableDateISO(iso);
+        state.viewOnly = !!viewOnly || (viewingUserId !== currentUser?.id) || dateLocked;
         if(!state.viewOnly) scheduleSaveState();
       }else{
         st.viewOnly = true;
