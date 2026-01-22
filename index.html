@@ -850,6 +850,11 @@
           <div id="userPill" class="pill info" style="display:none;">User: –</div>
           <button class="btn ghost" id="logoutBtn" type="button" style="display:none;">Logout</button>
 
+<button class="btn ghost hidden" id="adminBackBtn" type="button">
+  Admin-Startseite
+</button>
+
+
           <div class="pill">
             <span>Ausgewählter Tag:</span>
             <input id="datePicker" type="date" style="background:transparent;border:none;color:var(--text);font:inherit;padding:0;outline:none;">
@@ -1351,9 +1356,26 @@ st.classes = st.classes.map(c => ({
     let viewingName = null;
 
     let inspected = null;       // { user_id, display_name }
-    let inspectedState = null;  // friend state
+let inspectedState = null;  // friend state
+
+let adminEditingTargetId = null; // wenn gesetzt: Admin bearbeitet dieses Profil
+
+function isAdminSession(){
+  return !!currentUser && (currentUser.id === ADMIN_USER_ID);
+}
+
+
 
     function uiState(){ return inspectedState || state; }
+	function writableState(){
+  // Admin-Edit: wir schreiben in inspectedState
+  if(isAdminSession() && adminEditingTargetId && viewingUserId === adminEditingTargetId && inspectedState){
+    return inspectedState;
+  }
+  // sonst: Self
+  return state;
+}
+
     function isEditableDateISO(iso){
   const t = todayISO();
   const y = yesterdayISO();
@@ -1361,6 +1383,9 @@ st.classes = st.classes.map(c => ({
 }
 
 function uiIsViewOnly(){
+  // Admin bearbeitet fremdes Profil: niemals "Nur Ansicht"
+  if(isAdminSession() && adminEditingTargetId && viewingUserId === adminEditingTargetId) return false;
+
   // Freunde: immer nur Ansicht
   if(!!inspected || (viewingUserId !== currentUser?.id)) return true;
 
@@ -1386,40 +1411,50 @@ window.compareMeta = [];
     let saveQueued = false;
 
     function scheduleSaveState(){
-      if(!currentUser || !profileRow || !state) return;
-      if(state.viewOnly) return;
-      if(viewingUserId !== currentUser.id) return;
+  if(!currentUser || !profileRow) return;
 
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => flushSaveState(), 350);
-    }
+  // wenn UI gerade "Nur Ansicht" ist -> nicht speichern
+  if(uiIsViewOnly()) return;
+
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => flushSaveState(), 350);
+}
 
     async function flushSaveState(){
-      if(!currentUser || !profileRow || !state) return;
-      if(state.viewOnly) return;
-      if(viewingUserId !== currentUser.id) return;
+  if(!currentUser) return;
+  if(uiIsViewOnly()) return;
 
-      if(saveInFlight){
-        saveQueued = true;
-        return;
-      }
-      saveInFlight = true;
-      saveQueued = false;
+  const isAdminEdit =
+    isAdminSession() &&
+    adminEditingTargetId &&
+    (viewingUserId === adminEditingTargetId);
 
-      const payload = {
-        state: { ...state, viewOnly:false },
-        updated_at: new Date().toISOString(),
-      };
+  const targetUserId = isAdminEdit ? adminEditingTargetId : currentUser.id;
+  const targetState  = isAdminEdit ? inspectedState : state;
 
-      const { error } = await sb
-        .from("profiles")
-        .update(payload)
-        .eq("user_id", currentUser.id);
+  if(!targetState) return;
 
-      saveInFlight = false;
-      if(error) console.error("Save error:", error);
-      if(saveQueued) await flushSaveState();
-    }
+  if(saveInFlight){
+    saveQueued = true;
+    return;
+  }
+  saveInFlight = true;
+  saveQueued = false;
+
+  const payload = {
+    state: { ...targetState, viewOnly:false },
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await sb
+    .from("profiles")
+    .update(payload)
+    .eq("user_id", targetUserId);
+
+  saveInFlight = false;
+  if(error) console.error("Save error:", error);
+  if(saveQueued) await flushSaveState();
+}
 
     /****************
      * UI REFS       *
@@ -1473,6 +1508,8 @@ window.compareMeta = [];
 
     const logoutBtn = document.getElementById("logoutBtn");
     const userPill = document.getElementById("userPill");
+	
+	const adminBackBtn = document.getElementById("adminBackBtn");
 
     const weeklyAveragesEl = document.getElementById("weeklyAverages");
     const weeklyWinnersEl = document.getElementById("weeklyWinners");
@@ -1544,22 +1581,35 @@ window.compareMeta = [];
     }
 
     function showApp(){
-      authOverlay.classList.add("hidden");
-      adminRoot.classList.add("hidden");
-      appRoot.classList.remove("hidden");
-      userPill.style.display = "inline-flex";
-      userPill.textContent = `User: ${viewingName || profileRow?.display_name || currentUser?.email || "—"}${uiIsViewOnly() ? " (Ansicht)" : ""}`;
-      logoutBtn.style.display = "inline-flex";
-    }
+  authOverlay.classList.add("hidden");
+  adminRoot.classList.add("hidden");
+  appRoot.classList.remove("hidden");
+
+  userPill.style.display = "inline-flex";
+  userPill.textContent =
+    `User: ${viewingName || profileRow?.display_name || currentUser?.email || "—"}${uiIsViewOnly() ? " (Ansicht)" : ""}`;
+
+  logoutBtn.style.display = "inline-flex";
+
+  // Admin-Back-Button nur bei Admin-Edit
+  if(isAdminSession() && adminEditingTargetId){
+    adminBackBtn.classList.remove("hidden");
+  }else{
+    adminBackBtn.classList.add("hidden");
+  }
+}
 
     function showAdmin(){
-      authOverlay.classList.add("hidden");
-      appRoot.classList.add("hidden");
-      adminRoot.classList.remove("hidden");
-      userPill.style.display = "none";
-      logoutBtn.style.display = "none";
-      renderAdminPanel();
-    }
+  authOverlay.classList.add("hidden");
+  appRoot.classList.add("hidden");
+  adminRoot.classList.remove("hidden");
+
+  userPill.style.display = "none";
+  logoutBtn.style.display = "none";
+  adminBackBtn.classList.add("hidden");
+
+  renderAdminPanel();
+}
 
     /****************
      * AUTH HANDLERS *
@@ -1636,6 +1686,19 @@ window.compareMeta = [];
 
     logoutBtn.addEventListener("click", logoutAll);
     adminLogoutBtn.addEventListener("click", logoutAll);
+	
+	adminBackBtn.addEventListener("click", () => {
+  // Admin-Edit sauber beenden
+  adminEditingTargetId = null;
+  inspected = null;
+  inspectedState = null;
+  viewingUserId = null;
+  viewingName = null;
+
+  destroyCharts();
+  showAdmin();
+});
+
 
     /**********************
      * COMPARE MENU (UI)   *
@@ -2577,37 +2640,42 @@ function maxPossibleTodayPct(st, iso){
     function getNumericEntrySelf(iso, habitId){ return getNumericEntryIn(state, iso, habitId); }
 
     function setNumericValueForDay(iso, habitId, rawValue, { min=null, max=null } = {}){
-      if(uiIsViewOnly()) return;
-      const entry = getNumericEntrySelf(iso, habitId);
+  if(uiIsViewOnly()) return;
 
-      const s = String(rawValue ?? "").trim();
-      entry.text = s;
+  const stW = writableState();
+  const entry = getNumericEntryIn(stW, iso, habitId);
 
-      if(s === ""){
-        entry.value = null;
-      } else {
-        const n = parseDecimalDE(s);
-        if(Number.isFinite(n)){
-          let v = n;
-          if(min != null) v = Math.max(min, v);
-          if(max != null) v = Math.min(max, v);
-          entry.value = v;
-        } else {
-          entry.value = null;
-        }
-      }
+  const s = String(rawValue ?? "").trim();
+  entry.text = s;
 
-      scheduleSaveState();
+  if(s === ""){
+    entry.value = null;
+  } else {
+    const n = parseDecimalDE(s);
+    if(Number.isFinite(n)){
+      let v = n;
+      if(min != null) v = Math.max(min, v);
+      if(max != null) v = Math.min(max, v);
+      entry.value = v;
+    } else {
+      entry.value = null;
     }
+  }
+
+  scheduleSaveState();
+}
 
     function cycleCheckStateSelf(habit, iso){
-      if(uiIsViewOnly()) return;
-      if(habit.type !== "check") return;
-      const cur = getCheckStateIn(state, iso, habit.id);
-      const next = (cur === 0) ? 1 : (cur === 1) ? -1 : 0;
-      setCheckStateIn(state, iso, habit.id, next);
-      scheduleSaveState();
-    }
+  if(uiIsViewOnly()) return;
+  if(habit.type !== "check") return;
+
+  const stW = writableState();
+  const cur = getCheckStateIn(stW, iso, habit.id);
+  const next = (cur === 0) ? 1 : (cur === 1) ? -1 : 0;
+  setCheckStateIn(stW, iso, habit.id, next);
+
+  scheduleSaveState();
+}
 
     function opMeaning(dir){
       return (dir === "MAX") ? "Maximal (Ist ≤ Ziel)" : "Mindestens (Ist ≥ Ziel)";
@@ -3281,24 +3349,27 @@ const lastDayIdx = (() => {
     }
 
     function setSelectedDate(iso, { viewOnly=false } = {}){
-      const st = uiState();
-      st.selectedDate = iso;
-      ensureDayIn(st, iso);
+  const st = uiState();
+  st.selectedDate = iso;
+  ensureDayIn(st, iso);
 
-      datePicker.value = iso;
+  datePicker.value = iso;
 
-           if(st === state){
-        // Selbst: zusätzlich harte Regel -> nur heute/gestern editierbar
-        const dateLocked = !isEditableDateISO(iso);
-        state.viewOnly = !!viewOnly || (viewingUserId !== currentUser?.id) || dateLocked;
-        if(!state.viewOnly) scheduleSaveState();
-      }else{
-        st.viewOnly = true;
-      }
+  if(st === state){
+    // Selbst: zusätzlich harte Regel -> nur heute/gestern editierbar
+    const dateLocked = !isAdminSession() && !isEditableDateISO(iso);
+    state.viewOnly = !!viewOnly || (viewingUserId !== currentUser?.id) || dateLocked;
+    if(!state.viewOnly) scheduleSaveState();
+  }else{
+    // Fremdprofil: normalerweise nur Ansicht – außer Admin-Edit
+    const isAdminEdit = isAdminSession() && adminEditingTargetId && (viewingUserId === adminEditingTargetId);
+    st.viewOnly = !isAdminEdit; // Admin-Edit: false, sonst true
+  }
 
-      // lightweight updates (avoid re-rendering the habit inputs on every date change? date change is ok)
-      rerenderAll();
-    }
+  // lightweight updates
+  rerenderAll();
+}
+
 
     datePicker.addEventListener("change", () => {
       const iso = datePicker.value;
@@ -3316,23 +3387,26 @@ const lastDayIdx = (() => {
     }
 
     if(backToMeBtn){
-      backToMeBtn.addEventListener("click", async () => {
-        try{
-          await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
-          showApp();
-          await refreshCompareDatasets();
-        }catch(e){
-          inspected = null;
-          inspectedState = null;
-          viewingUserId = currentUser?.id;
-          viewingName = profileRow?.display_name || currentUser?.email || "—";
-          updateBackButton();
-          setSelectedDate(todayISO(), { viewOnly:false });
-          await refreshCompareDatasets();
-          showApp();
-        }
-      });
+  backToMeBtn.addEventListener("click", async () => {
+    // Admin-Edit beenden
+    adminEditingTargetId = null;
+
+    try{
+      await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
+      showApp();
+      await refreshCompareDatasets();
+    }catch(e){
+      inspected = null;
+      inspectedState = null;
+      viewingUserId = currentUser?.id;
+      viewingName = profileRow?.display_name || currentUser?.email || "—";
+      updateBackButton();
+      setSelectedDate(todayISO(), { viewOnly:false });
+      await refreshCompareDatasets();
+      showApp();
     }
+  });
+}
 
     function markBoxApplyState(el, stateName){
   el.classList.remove("empty","full","partial","zero");
@@ -3584,10 +3658,11 @@ if(!viewOnly){
 
       if(!viewOnly){
         box.addEventListener("click", () => {
-  const selfHabit = state.habits.find(x => x.id === h.id) || h;
-  cycleCheckStateSelf(selfHabit, iso);
+  const stW = writableState();
+const selfHabit = stW.habits.find(x => x.id === h.id) || h;
+cycleCheckStateSelf(selfHabit, iso);
 
-  const now = getCheckStateIn(state, iso, selfHabit.id);
+const now = getCheckStateIn(stW, iso, selfHabit.id);
   if(now === 0) markBoxApplyState(box, "empty");
   else if(now === 1) markBoxApplyState(box, "full");
   else markBoxApplyState(box, "zero");
@@ -4394,14 +4469,49 @@ enhanceInput(newClassRank, { onEnter: addClass });
         left.appendChild(meta);
 
         const right = document.createElement("div");
-        right.className = "adminActions";
+right.className = "adminActions";
 
-        const note = document.createElement("div");
-        note.className = "note";
-        note.style.margin = "0";
-        note.textContent = "UI-Admin (DB-Admin nur mit eigener Policy/Service-Key).";
+const visitBtn = document.createElement("button");
+visitBtn.className = "btn";
+visitBtn.type = "button";
+visitBtn.textContent = "Besuchen (Admin-Edit)";
+visitBtn.onclick = async () => {
+  try{
+    adminEditingTargetId = rec.user_id;
 
-        right.appendChild(note);
+    const { data, error } = await sb
+      .from("profiles")
+      .select("user_id, display_name, state")
+      .eq("user_id", rec.user_id)
+      .maybeSingle();
+
+    if(error) throw error;
+    if(!data?.state) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
+
+    inspected = { user_id: data.user_id, display_name: data.display_name || rec.user_id };
+    inspectedState = migrateFromOlder(data.state);
+    inspectedState.viewOnly = false;
+
+    viewingUserId = data.user_id;
+    viewingName = inspected.display_name;
+
+    updateBackButton();
+    showApp();
+    bootAfterLogin();
+    await refreshCompareDatasets();
+  }catch(e){
+    alert(e?.message ? String(e.message) : "Fehler beim Laden.");
+  }
+};
+
+const note = document.createElement("div");
+note.className = "note";
+note.style.margin = "0";
+note.textContent = "Admin-Edit: volle Bearbeitung + Speichern.";
+
+right.appendChild(visitBtn);
+right.appendChild(note);
+
 
         row.appendChild(left);
         row.appendChild(right);
