@@ -2423,10 +2423,20 @@ function isClassRankTakenSelf(rank, excludeClassId=null){
 
 function toggleClassCollapsedSelf(classId){
   if(uiIsViewOnly()) return;
-  const c = (state.classes || []).find(x => x.id === classId);
+
+  // Toggle immer im "aktuell bearbeitbaren" State:
+  // - Admin-Edit: inspectedState
+  // - sonst: state
+  const stW = writableState();
+  if(!stW || !Array.isArray(stW.classes)) return;
+
+  const c = stW.classes.find(x => x.id === classId);
   if(!c) return;
+
   c.collapsed = !c.collapsed;
-  scheduleSaveState();
+
+  // Speichern nur für Self; Admin muss collapsed nicht persistieren
+  if(stW === state) scheduleSaveState();
 }
 
 function toggleClassCollapsedViewOnly(st, classId){
