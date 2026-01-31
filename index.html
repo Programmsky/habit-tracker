@@ -799,6 +799,33 @@
   font-size: 13px;
 }
 
+/* kleines Info-Kästchen für Hover-Hilfe */
+.tipWrap .tiny{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 16px;
+  height: 16px;
+
+  border-radius: 5px;
+  border: 1px solid rgba(35,48,90,.75);
+  background: rgba(18,26,51,.55);
+
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+
+  cursor: help;
+  user-select: none;
+}
+
+.cardHintBottom {
+  margin-top: 12px;          /* Abstand zum Canvas */
+  margin-bottom: 0;          /* kein eigener Bottom-Margin */
+  padding-bottom: 4px;       /* identischer Abstand zum Card-Rand */
+  line-height: 1.2;
+}
 
 
   </style>
@@ -870,12 +897,13 @@
     <section class="charts">
       <div class="card">
         <div class="cardHeader">
-          <h2>Monat: Tages-Score (0–100%)</h2>
+          <h2>Tages-Wert (%)</h2>
 
           <div class="compareWrap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
             <button id="backToMeBtn" class="btn ghost hidden" type="button">← Zurück</button>
             <button id="compareBtn" class="btn ghost" type="button">Vergleichen ▾</button>
             <div class="pill"><span id="monthLabel1">–</span></div>
+			<button id="rangeToggleBtn" class="btn ghost" type="button">Monat</button>
 
             <div id="comparePanel" class="comparePanel hidden" role="dialog" aria-modal="false">
               <div class="comparePanelTitle">
@@ -883,29 +911,30 @@
                 <button id="compareCloseBtn" class="btn ghost" type="button">Schließen</button>
               </div>
               <div class="tiny" style="margin-bottom:10px;">
-                Haken setzen → Score-Linie erscheint im Diagramm. Klick auf Punkte öffnet das Profil dieses Freundes am gewählten Tag (nur Ansicht).
+                Haken setzen → Score-Linie erscheint im Diagramm.
               </div>
               <div id="compareList" class="compareList"></div>
-              <div class="tiny" style="margin-top:10px;">
-                Hinweis: Farben sind automatisch/kontrastierend gewählt. Dein eigener Graph bleibt die Standard-Farbe.
-              </div>
             </div>
           </div>
         </div>
         <div class="cardBody">
           <canvas id="scoreChart"></canvas>
-          <div class="clickHint">Klick: zeigt den Tag oben an. (Bei Freunden: öffnet deren Ansicht.)</div>
+          <div class="clickHint cardHintBottom">
+  Klick: zeigt den Tag oben an. (Bei Freunden: öffnet deren Ansicht.)
+</div>
         </div>
       </div>
 
       <div class="card">
         <div class="cardHeader">
-          <h2>Monat: Schlafstunden</h2>
+          <h2>Schlafstunden</h2>
           <div class="pill"><span id="monthLabel2">–</span></div>
         </div>
         <div class="cardBody">
           <canvas id="sleepChart"></canvas>
-          <div class="tiny">Rote Linie = Schlafziel.</div>
+          <div class="tiny cardHintBottom">
+  gestrichelte Linie = Schlafziel
+</div>
         </div>
       </div>
     </section>
@@ -930,7 +959,7 @@
       <section class="card">
         <div class="cardHeader">
           <h2>Habits</h2>
-          <div class="pill"><span>Tages-Score:</span> <strong id="scoreLabel">0%</strong></div>
+          <div class="pill"><span>Tages-Wert (%)</span> <strong id="scoreLabel">0%</strong></div>
         </div>
         <div class="cardBody">
           <div id="habitList" class="habitList"></div>
@@ -1016,10 +1045,24 @@
       </div>
 
       <div class="row hidden" id="newHabitGoalRow">
-        <label for="newHabitGoal">Zielwert</label>
-        <input class="field" id="newHabitGoal" type="text" inputmode="decimal" placeholder="z. B. 2000" />
-        <span class="tiny">Standard: ≥ (mindestens)</span>
-      </div>
+  <label for="newHabitGoal">Zielwert</label>
+  <input class="field" id="newHabitGoal" type="text" inputmode="decimal" placeholder="z. B. 2000" />
+  <span class="tiny">Standard: ≥ (mindestens)</span>
+</div>
+
+<div class="row hidden" id="newHabitHalfRow">
+  <label for="newHabitHalfLife">
+  Halbwert
+</label>
+  <input class="field" id="newHabitHalfLife" type="text" inputmode="decimal" placeholder="z. B. 1" />
+  <span class="tipWrap">
+  <span class="tiny">?</span>
+  <span class="tipBubble">
+    Bei Zielverfehlung wird pro (Abweichung / Halbwert) die Gewichtung halbiert
+  </span>
+</span>
+</div>
+
 
       <div class="row">
         <button class="btn" id="addHabitBtn" type="button">Hinzufügen</button>
@@ -1173,6 +1216,7 @@
     /**********************
      * APP STATE MODEL    *
      **********************/
+	 
 const defaultState = () => ({
   habits: [
     { id: "sleep", name: "Schlaf", weight: 30, type: "numeric", goal: 7.5, dir: "MIN", halfLife: 0.5 },
@@ -1183,8 +1227,14 @@ const defaultState = () => ({
   dayData: {},
   selectedDate: todayISO(),
   viewOnly: false,
-});
 
+  // Compare-Einstellungen pro Account (serverseitig gespeichert)
+  settings: {
+    compareSelected: [],
+    compareColors: {},     // user_id -> "#RRGGBB"
+    compareShowSelf: true,
+  },
+});
 
     function cryptoId(){ return "h_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16); }
     function todayISO(){ return toISODate(new Date()); }
@@ -1225,54 +1275,10 @@ const defaultState = () => ({
     /**********************
      * PERSIST: COMPARE    *
      **********************/
-    const LS_COMPARE_KEY = "ht_compare_selected_v1";
-    function loadCompareSelected(){
-      try{
-        const raw = localStorage.getItem(LS_COMPARE_KEY);
-        if(!raw) return new Set();
-        const arr = JSON.parse(raw);
-        if(!Array.isArray(arr)) return new Set();
-        return new Set(arr.filter(x => typeof x === "string" && x.length));
-      }catch{
-        return new Set();
-      }
-    }
-    function saveCompareSelected(){
-      try{ localStorage.setItem(LS_COMPARE_KEY, JSON.stringify(Array.from(compareSelected))); }catch{}
-    }
 
-const LS_COMPARE_COLORS_KEY = "ht_compare_colors_v1";
-function loadCompareColors(){
-  try{
-    const raw = localStorage.getItem(LS_COMPARE_COLORS_KEY);
-    if(!raw) return {};
-    const obj = JSON.parse(raw);
-    if(!obj || typeof obj !== "object") return {};
-    return obj;
-  }catch{
-    return {};
-  }
-}
-function saveCompareColors(){
-  try{ localStorage.setItem(LS_COMPARE_COLORS_KEY, JSON.stringify(compareColorPrefs || {})); }catch{}
-}
 function getPreferredCompareColor(userId){
   const c = compareColorPrefs?.[userId];
   return (typeof c === "string" && c.trim().length) ? c.trim() : null;
-}
-
-const LS_COMPARE_SHOW_SELF_KEY = "ht_compare_show_self_v1";
-function loadCompareShowSelf(){
-  try{
-    const raw = localStorage.getItem(LS_COMPARE_SHOW_SELF_KEY);
-    if(raw == null) return true; // Default: Self sichtbar
-    return raw === "1";
-  }catch{
-    return true;
-  }
-}
-function saveCompareShowSelf(){
-  try{ localStorage.setItem(LS_COMPARE_SHOW_SELF_KEY, compareShowSelf ? "1" : "0"); }catch{}
 }
 
     function migrateFromOlder(st){
@@ -1314,6 +1320,12 @@ st.classes = st.classes.map(c => ({
   collapsed: !!c.collapsed,
   habitIds: Array.isArray(c.habitIds) ? c.habitIds.filter(Boolean) : []
 }));
+
+            // Settings-Defaults (für alte States)
+      if(!st.settings || typeof st.settings !== "object") st.settings = {};
+      if(!Array.isArray(st.settings.compareSelected)) st.settings.compareSelected = [];
+      if(!st.settings.compareColors || typeof st.settings.compareColors !== "object") st.settings.compareColors = {};
+      if(typeof st.settings.compareShowSelf !== "boolean") st.settings.compareShowSelf = true;
 
       st.viewOnly = false;
       return st;
@@ -1395,9 +1407,9 @@ function uiIsViewOnly(){
 }
 
     let friendsCache = [];
-    let compareSelected = loadCompareSelected();
-let compareColorPrefs = loadCompareColors(); // user_id -> "#RRGGBB" (auch self möglich)
-let compareShowSelf = loadCompareShowSelf(); // self an/aus
+let compareSelected = new Set();  // wird nach Login aus state.settings geladen
+let compareColorPrefs = {};       // wird nach Login aus state.settings geladen
+let compareShowSelf = true;       // wird nach Login aus state.settings geladen
 window.compareMeta = [];
 
     // state cache for weekly stats / compare rendering
@@ -1481,6 +1493,7 @@ window.compareMeta = [];
 
     const monthLabel1 = document.getElementById("monthLabel1");
     const monthLabel2 = document.getElementById("monthLabel2");
+	const rangeToggleBtn = document.getElementById("rangeToggleBtn");
     const backToMeBtn = document.getElementById("backToMeBtn");
 
     const newHabitName = document.getElementById("newHabitName");
@@ -1488,6 +1501,9 @@ window.compareMeta = [];
     const newHabitIsNumeric = document.getElementById("newHabitIsNumeric");
     const newHabitGoalRow = document.getElementById("newHabitGoalRow");
     const newHabitGoal = document.getElementById("newHabitGoal");
+	const newHabitHalfRow = document.getElementById("newHabitHalfRow");
+	const newHabitHalfLife = document.getElementById("newHabitHalfLife");
+
 
     const addHabitBtn = document.getElementById("addHabitBtn");
     const addHelp = document.getElementById("addHelp");
@@ -1651,7 +1667,13 @@ window.compareMeta = [];
       currentUser = user;
       profileRow = await getOrCreateProfile(user);
 
-      await loadProfileForView(user.id, profileRow.display_name || user.email || "—", { viewOnly:false });
+            await loadProfileForView(user.id, profileRow.display_name || user.email || "—", { viewOnly:false });
+
+      // Compare-Settings aus dem eigenen State ziehen (pro Account)
+      const s = state?.settings || {};
+      compareSelected = new Set(Array.isArray(s.compareSelected) ? s.compareSelected : []);
+      compareColorPrefs = (s.compareColors && typeof s.compareColors === "object") ? s.compareColors : {};
+      compareShowSelf = (typeof s.compareShowSelf === "boolean") ? s.compareShowSelf : true;
 
       if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID) showAdmin();
       else showApp();
@@ -1679,7 +1701,9 @@ window.compareMeta = [];
       compareStateCache.clear();
       compareLabelCache.clear();
       compareColorCache.clear();
-      compareShowSelf = loadCompareShowSelf();
+      compareSelected = new Set();
+compareColorPrefs = {};
+compareShowSelf = true;
       destroyCharts();
       showAuth();
     }
@@ -1699,6 +1723,16 @@ window.compareMeta = [];
   showAdmin();
 });
 
+function saveCompareSettingsToState(){
+  if(!state) return;
+
+  if(!state.settings || typeof state.settings !== "object") state.settings = {};
+  state.settings.compareSelected = Array.from(compareSelected);
+  state.settings.compareColors = compareColorPrefs || {};
+  state.settings.compareShowSelf = !!compareShowSelf;
+
+  scheduleSaveState(); // schreibt profiles.state nach Supabase
+}
 
     /**********************
      * COMPARE MENU (UI)   *
@@ -1711,6 +1745,12 @@ window.compareMeta = [];
 
     compareBtn.addEventListener("click", () => toggleCompare());
     compareCloseBtn.addEventListener("click", () => toggleCompare(false));
+	
+	if(rangeToggleBtn){
+  rangeToggleBtn.addEventListener("click", () => {
+    setChartRange(chartRange === "month" ? "week" : "month");
+  });
+}
 
     document.addEventListener("click", (e) => {
       if(comparePanel.classList.contains("hidden")) return;
@@ -1814,11 +1854,11 @@ window.compareMeta = [];
 
           b.addEventListener("click", async () => {
             compareColorPrefs[currentUser.id] = c.hex;
-            saveCompareColors();
-            sw.style.background = c.hex;
+saveCompareSettingsToState();
+sw.style.background = c.hex;
 
-            await refreshCompareDatasets();
-            buildCompareMenu();
+await refreshCompareDatasets();
+buildCompareMenu();
           });
 
           palette.appendChild(b);
@@ -1852,10 +1892,10 @@ window.compareMeta = [];
         cb.type = "checkbox";
         cb.checked = !!compareShowSelf;
         cb.addEventListener("change", async () => {
-          compareShowSelf = !!cb.checked;
-          saveCompareShowSelf();
-          await refreshCompareDatasets();
-        });
+  compareShowSelf = !!cb.checked;
+  saveCompareSettingsToState();
+  await refreshCompareDatasets();
+});
 
         const t = document.createElement("span");
         t.textContent = "anzeigen";
@@ -1970,13 +2010,12 @@ window.compareMeta = [];
 
           b.addEventListener("click", async () => {
             compareColorPrefs[f.user_id] = c.hex;
-            saveCompareColors();
+saveCompareSettingsToState();
 
-            sw.style.background = c.hex;
+sw.style.background = c.hex;
 
-            // Farben sofort überall übernehmen (Graph + Ø Woche + Best-of)
-            await refreshCompareDatasets();
-            buildCompareMenu();
+await refreshCompareDatasets();
+buildCompareMenu();
           });
 
           palette.appendChild(b);
@@ -2011,9 +2050,9 @@ window.compareMeta = [];
         cb.checked = compareSelected.has(f.user_id);
         cb.addEventListener("change", async () => {
           if(cb.checked) compareSelected.add(f.user_id);
-          else compareSelected.delete(f.user_id);
-          saveCompareSelected();
-          await refreshCompareDatasets();
+else compareSelected.delete(f.user_id);
+saveCompareSettingsToState();
+await refreshCompareDatasets();
         });
 
         const t = document.createElement("span");
@@ -2487,23 +2526,24 @@ function classAggregateMarkStateForDay(st, cls, iso){
   // Priorität 1: wenn eines leer -> leer (offen)
   if(rawStates.some(x => x.s === "empty")) return "empty";
 
-  // 2) Spezialregel NUR für Klassen-Status:
-  // Numeric + dir MAX + (nicht erreicht, also "partial") wird zu:
-  // - "zero", wenn Verlust > 50% (credit/w < 0.5)
-  // - "full", wenn Verlust < 50% (credit/w >= 0.5)
+    // 2) Spezialregel NUR für Klassen-Status:
+  // Numeric + (dir MAX ODER sleep) + (nicht erreicht, also "partial") wird zu:
+  // - "zero", wenn <50% erreicht (credit/w < 0.5)
+  // - "full", wenn >=50% erreicht
   // (Habit selbst bleibt weiterhin "partial" gelb!)
   const states = rawStates.map(x => {
     const h = x.h;
     let s = x.s;
 
     if(s === "partial" && h.type === "numeric"){
-      const dir = (h.dir === "MAX") ? "MAX" : "MIN";
-      if(dir === "MAX"){
+      // Schlaf ist technisch MIN, aber für Klassenstatus irreversibel wie MAX behandeln
+      const treatAsMaxForClass = (h.id === "sleep") || (h.dir === "MAX");
+
+      if(treatAsMaxForClass){
         const w = Number(h.weight || 0);
         const credit = (w > 0) ? numericCreditIn(st, h, iso) : 0;
         const frac = (w > 0) ? (credit / w) : 0; // 0..1
 
-        // >50% Verlust => frac < 0.5 => wie "verkackt" fuer Klassenstatus
         s = (frac < 0.5) ? "zero" : "full";
       }
     }
@@ -2612,11 +2652,14 @@ function lostWeightTodayIn(st, habit, iso){
   // rot (voll entwertet) -> voller Verlust
   if(credit <= 0) return w;
 
-  // NEU: MIN-Ziele (mindestens) NICHT abziehen (weil noch erreichbar)
+    // Schlaf ist technisch MIN, aber irreversibel wie MAX behandeln (nach Eintrag)
   const dir = (habit.dir === "MAX") ? "MAX" : "MIN";
-  if(dir === "MIN") return 0;
+  const treatAsMaxForMaxPossible = (habit.id === "sleep") || (dir === "MAX");
 
-  // MAX-Ziele: irreversibel verloren = w - credit
+  // Normale MIN-Habits: nichts als "verloren" zählen (weil noch erreichbar)
+  if(!treatAsMaxForMaxPossible) return 0;
+
+  // Schlaf (und echte MAX-Habits): irreversibel verloren = w - credit
   return clamp(w - credit, 0, w);
 }
 
@@ -2763,6 +2806,55 @@ document.addEventListener("dragend", () => {
       const d = parseISO(iso);
       return d.toLocaleDateString("de-DE", { month:"long", year:"numeric" });
     }
+	
+	let chartRange = "month"; // "month" | "week"
+
+function fmtShortDM(iso){
+  const d = parseISO(iso);
+  return d.toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit" });
+}
+
+function weekTitleFromISO(iso){
+  const ws = startOfWeekMonday(iso);
+  const we = addDaysISO(ws, 6);
+  return `Woche: ${fmtShortDM(ws)}–${fmtShortDM(we)}`;
+}
+
+function buildWeekSeriesFor(st, iso){
+  const weekStart = startOfWeekMonday(iso);
+  const labels = [];
+  const scores = [];
+  const sleeps = [];
+
+  const sleepHabit = getSleepHabitFrom(st);
+  const goal = sleepHabit && Number.isFinite(Number(sleepHabit.goal)) ? Number(sleepHabit.goal) : 0;
+
+  const dayNames = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+
+  for(let di=0; di<7; di++){
+    const dayISO = addDaysISO(weekStart, di);
+    ensureDayIn(st, dayISO);
+
+    const d = parseISO(dayISO);
+    labels.push(`${dayNames[di]} ${String(d.getDate()).padStart(2,"0")}`);
+
+    scores.push(dayScoreIn(st, dayISO));
+
+    const v = getNumericEntryIn(st, dayISO, "sleep").value;
+    sleeps.push(v == null ? null : Number(v));
+  }
+
+  const goals = Array.from({ length: 7 }, () => goal);
+  return { labels, scores, sleeps, goals, weekStart };
+}
+
+function setChartRange(next){
+  chartRange = (next === "week") ? "week" : "month";
+  if(rangeToggleBtn){
+    rangeToggleBtn.textContent = (chartRange === "month") ? "Monat" : "Woche";
+  }
+  repaintCharts();
+}
 
     function getSleepHabitFrom(st){
       return st.habits.find(h => h.id === "sleep") || null;
@@ -2837,60 +2929,72 @@ document.addEventListener("dragend", () => {
           hover: { mode: "nearest", intersect: false },
           scales:{ y:{ suggestedMin:0, suggestedMax:100, ticks:{ callback:(v)=> `${v}%` } } },
           onClick: async (evt) => {
-            if(!scoreChart) return;
+  if(!scoreChart) return;
 
-            // labels follow CURRENTLY VIEWED month (friend or self), but datasets are always self+inspected+selected
-            const monthBase = uiState();
-            const series = buildMonthSeriesFor(monthBase, monthBase?.selectedDate || todayISO());
+  // Nur wenn ein Punkt wirklich getroffen wurde
+  const pts = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:true }, true);
+  if(!pts.length) return;
 
-            const pts = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:true }, true);
-            let idx, dsIdx;
-            if(pts.length){
-              idx = pts[0].index;
-              dsIdx = pts[0].datasetIndex;
-            } else {
-              const pts2 = scoreChart.getElementsAtEventForMode(evt, "nearest", { intersect:false }, true);
-              if(!pts2.length) return;
-              idx = pts2[0].index;
-              dsIdx = pts2[0].datasetIndex;
-            }
+  const idx = pts[0].index;
+  const dsIdx = pts[0].datasetIndex;
 
-            const iso2 = toISODate(new Date(series.year, series.monthIndex0, idx+1));
-            const meta = (window.compareMeta && window.compareMeta[dsIdx]) ? window.compareMeta[dsIdx] : { kind:"self" };
+  // Datum zur X-Position bestimmen (Woche/Monat)
+  const baseISO = uiState()?.selectedDate || todayISO();
 
-            // click on a friend's dataset -> inspect that friend (but keep both graphs: self + inspected + selections)
-            if(meta.kind === "friend" && meta.user_id){
-              try{
-                const { data, error } = await sb
-                  .from("profiles")
-                  .select("user_id, display_name, state")
-                  .eq("user_id", meta.user_id)
-                  .maybeSingle();
+  let iso2;
+  if(typeof chartRange !== "undefined" && chartRange === "week"){
+    const ws = startOfWeekMonday(baseISO);
+    iso2 = addDaysISO(ws, idx);               // idx 0..6 => Mo..So
+  }else{
+    const d = parseISO(baseISO);
+    iso2 = toISODate(new Date(d.getFullYear(), d.getMonth(), idx + 1)); // idx 0.. => Tag im Monat
+  }
 
-                if(error) throw error;
-                if(!data?.state) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
+  // Meta aus Dataset (falls du __kind/__user_id noch nicht hast, sag Bescheid)
+  const ds = scoreChart.data?.datasets?.[dsIdx];
+  const kind = ds?.__kind || "self";
+  const userId = ds?.__user_id || currentUser?.id;
+  const displayName = ds?.__display_name || ds?.label || "—";
 
-                inspected = { user_id: data.user_id, display_name: data.display_name || meta.display_name || "Freund" };
-                inspectedState = migrateFromOlder(data.state);
-                inspectedState.viewOnly = true;
+  // Freund geklickt => Freund öffnen
+  if(kind === "friend" && userId && userId !== currentUser?.id){
+    try{
+      const { data, error } = await sb
+        .from("profiles")
+        .select("user_id, display_name, state")
+        .eq("user_id", userId)
+        .maybeSingle();
 
-                viewingUserId = inspected.user_id;
-                viewingName = inspected.display_name;
+      if(error) throw error;
+      if(!data?.state) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
 
-                updateBackButton();
-                setSelectedDate(iso2, { viewOnly:true });
-                showApp();
+      inspected = { user_id: data.user_id, display_name: data.display_name || displayName };
+      inspectedState = migrateFromOlder(data.state);
+      inspectedState.viewOnly = true;
 
-                await refreshCompareDatasets();
-              }catch(e){
-                alert(e?.message ? String(e.message) : "Fehler beim Laden.");
-              }
-              return;
-            }
+      viewingUserId = inspected.user_id;
+      viewingName = inspected.display_name;
 
-            // click on self dataset -> just change day in current view mode
-            setSelectedDate(iso2, { viewOnly: uiIsViewOnly() });
-          }
+      updateBackButton();
+      setSelectedDate(iso2, { viewOnly:true });
+      showApp();
+      await refreshCompareDatasets();
+    }catch(e){
+      alert(e?.message ? String(e.message) : "Fehler beim Laden.");
+    }
+    return;
+  }
+
+  // Self geklickt:
+  // Wenn wir gerade einen Freund ansehen, zuerst zurück zu Self wechseln
+  if(currentUser && viewingUserId !== currentUser.id){
+    await loadProfileForView(currentUser.id, profileRow?.display_name || currentUser?.email || "—", { viewOnly:false });
+    showApp();
+  }
+
+  setSelectedDate(iso2, { viewOnly: uiIsViewOnly() });
+}
+
         }
       });
 
@@ -2933,7 +3037,10 @@ document.addEventListener("dragend", () => {
       const monthISO = uiState()?.selectedDate || state.selectedDate;
 
       // labels follow currently viewed month
-      const baseSeriesForLabels = buildMonthSeriesFor(uiState(), monthISO);
+      const baseSeriesForLabels = (chartRange === "month")
+  ? buildMonthSeriesFor(uiState(), monthISO)
+  : buildWeekSeriesFor(uiState(), monthISO);
+
 
       const datasets = [];
       window.compareMeta = [];
@@ -2945,10 +3052,17 @@ document.addEventListener("dragend", () => {
         const selfPref = getPreferredCompareColor(currentUser.id);
         const selfColor = selfPref || selfDefault;
 
-        const selfSeries = buildMonthSeriesFor(state, monthISO);
+        const selfSeries = (chartRange === "month")
+  ? buildMonthSeriesFor(state, monthISO)
+  : buildWeekSeriesFor(state, monthISO);
 
-        datasets.push(baseScoreDataset(selfLabel, selfSeries.scores, selfColor));
-        window.compareMeta.push({ kind:"self", user_id: currentUser.id, display_name: selfLabel });
+        const dsSelf = baseScoreDataset(selfLabel, selfSeries.scores, selfColor);
+dsSelf.__kind = "self";
+dsSelf.__user_id = currentUser.id;
+dsSelf.__display_name = selfLabel;
+
+datasets.push(dsSelf);
+window.compareMeta.push({ kind:"self", user_id: currentUser.id, display_name: selfLabel });
 
         compareStateCache.set(currentUser.id, state);
         compareLabelCache.set(currentUser.id, selfLabel);
@@ -2964,10 +3078,17 @@ document.addEventListener("dragend", () => {
         const col = prefCol || autoCol;
 
         const label = inspected.display_name || "Freund";
-        const s = buildMonthSeriesFor(inspectedState, monthISO);
+        const s = (chartRange === "month")
+  ? buildMonthSeriesFor(inspectedState, monthISO)
+  : buildWeekSeriesFor(inspectedState, monthISO);
 
-        datasets.push(baseScoreDataset(label, s.scores, col));
-        window.compareMeta.push({ kind:"friend", user_id: inspected.user_id, display_name: label });
+        const dsIns = baseScoreDataset(label, s.scores, col);
+dsIns.__kind = "friend";
+dsIns.__user_id = inspected.user_id;
+dsIns.__display_name = label;
+
+datasets.push(dsIns);
+window.compareMeta.push({ kind:"friend", user_id: inspected.user_id, display_name: label });
 
         compareStateCache.set(inspected.user_id, inspectedState);
         compareLabelCache.set(inspected.user_id, label);
@@ -3000,10 +3121,17 @@ document.addEventListener("dragend", () => {
             const col = prefCol || autoCol;
 
             const label = data.display_name || (String(uid).slice(0,8) + "…");
-            const s2 = buildMonthSeriesFor(st2, monthISO);
+            const s2 = (chartRange === "month")
+  ? buildMonthSeriesFor(st2, monthISO)
+  : buildWeekSeriesFor(st2, monthISO);
 
-            datasets.push(baseScoreDataset(label, s2.scores, col));
-            window.compareMeta.push({ kind:"friend", user_id: uid, display_name: label });
+            const dsF = baseScoreDataset(label, s2.scores, col);
+dsF.__kind = "friend";
+dsF.__user_id = uid;
+dsF.__display_name = label;
+
+datasets.push(dsF);
+window.compareMeta.push({ kind:"friend", user_id: uid, display_name: label });
 
             compareStateCache.set(uid, st2);
             compareLabelCache.set(uid, label);
@@ -3090,33 +3218,47 @@ document.addEventListener("dragend", () => {
     }
 
     function repaintCharts(){
-      if(!scoreChart || !sleepChart) return;
+  if(!scoreChart || !sleepChart) return;
 
-      const stView = uiState();
-      if(!stView) return;
+  const stView = uiState();
+  if(!stView) return;
 
-      monthLabel1.textContent = monthTitleFromISO(stView.selectedDate);
-      monthLabel2.textContent = monthTitleFromISO(stView.selectedDate);
+  const isoBase = stView.selectedDate;
 
-      const series = buildMonthSeriesFor(stView, stView.selectedDate);
+  // Labels + Titel abhängig vom Range
+  if(chartRange === "month"){
+    monthLabel1.textContent = monthTitleFromISO(isoBase);
+    monthLabel2.textContent = monthTitleFromISO(isoBase);
 
-          sleepChart.data.labels = series.labels;
-      sleepChart.data.datasets[0].data = series.sleeps;
-      sleepChart.data.datasets[1].data = series.goals;
+    const series = buildMonthSeriesFor(stView, isoBase);
 
-      // Schlaf-Graph: Farbe wie Self (Compare-Farbwahl), fallback = Standardblau
-      if(currentUser){
-        const selfDefault = "rgba(122,162,255,.95)";
-        const selfPref = getPreferredCompareColor(currentUser.id);
-        const col = selfPref || selfDefault;
-        sleepChart.data.datasets[0].borderColor = col;
-        sleepChart.data.datasets[0].backgroundColor = col;
-      }
+    sleepChart.data.labels = series.labels;
+    sleepChart.data.datasets[0].data = series.sleeps;
+    sleepChart.data.datasets[1].data = series.goals;
+  }else{
+    monthLabel1.textContent = weekTitleFromISO(isoBase);
+    monthLabel2.textContent = weekTitleFromISO(isoBase);
 
-      sleepChart.update();
+    const series = buildWeekSeriesFor(stView, isoBase);
 
-      refreshCompareDatasets();
-    }
+    sleepChart.data.labels = series.labels;
+    sleepChart.data.datasets[0].data = series.sleeps;
+    sleepChart.data.datasets[1].data = series.goals;
+  }
+
+  // Schlaf-Graph: Farbe wie bisher (Self-Farbwahl)
+  if(currentUser){
+    const selfDefault = "rgba(122,162,255,.95)";
+    const selfPref = getPreferredCompareColor(currentUser.id);
+    const col = selfPref || selfDefault;
+    sleepChart.data.datasets[0].borderColor = col;
+    sleepChart.data.datasets[0].backgroundColor = col;
+  }
+
+  sleepChart.update();
+
+  refreshCompareDatasets();
+}
 
     /*****************
      * WEEKLY PANEL   *
@@ -3337,10 +3479,11 @@ const lastDayIdx = (() => {
     }
 
     function setAddNumericUI(){
-      const on = !!newHabitIsNumeric.checked;
-      newHabitGoalRow.classList.toggle("hidden", !on);
-      if(on) newHabitGoal.focus();
-    }
+  const on = !!newHabitIsNumeric.checked;
+  newHabitGoalRow.classList.toggle("hidden", !on);
+  newHabitHalfRow.classList.toggle("hidden", !on);
+  if(on) newHabitGoal.focus();
+}
     newHabitIsNumeric.addEventListener("change", setAddNumericUI);
 
     function ampelColor(pct){
@@ -4274,15 +4417,24 @@ rank.addEventListener("blur", commitClassRank);
           addHelp.textContent = "Bitte einen gültigen Zielwert eingeben (z. B. 2000).";
           return;
         }
-        state.habits.push({
-          id: cryptoId(),
-          name,
-          weight: w,
-          type: "numeric",
-          goal: g,
-          dir: "MIN",
-          halfLife: 1
-        });
+        const halfRaw = (newHabitHalfLife.value || "").trim();
+const half = parseDecimalDE(halfRaw);
+
+if(halfRaw && (!Number.isFinite(half) || half <= 0)){
+  addHelp.textContent = "Bitte einen gültigen Halbwert > 0 eingeben (z. B. 1 oder 0,5).";
+  return;
+}
+
+state.habits.push({
+  id: cryptoId(),
+  name,
+  weight: w,
+  type: "numeric",
+  goal: g,
+  dir: "MIN",
+  halfLife: (halfRaw ? half : 1)
+});
+
       } else {
         state.habits.push({ id: cryptoId(), name, weight: w, type: "check" });
       }
@@ -4291,6 +4443,7 @@ rank.addEventListener("blur", commitClassRank);
       newHabitWeight.value = "0";
       newHabitIsNumeric.checked = false;
       newHabitGoal.value = "";
+	  newHabitHalfLife.value = "";
       setAddNumericUI();
 
       scheduleSaveState();
@@ -4305,6 +4458,8 @@ rank.addEventListener("blur", commitClassRank);
     enhanceInput(newHabitName, { onEnter: addHabit });
     enhanceInput(newHabitWeight, { onEnter: addHabit });
     enhanceInput(newHabitGoal, { onEnter: addHabit });
+	enhanceInput(newHabitHalfLife, { onEnter: addHabit });
+
 
 function addClass(){
   if(uiIsViewOnly()) return;
