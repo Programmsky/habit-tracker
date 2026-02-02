@@ -1233,6 +1233,7 @@ const defaultState = () => ({
     compareSelected: [],
     compareColors: {},     // user_id -> "#RRGGBB"
     compareShowSelf: true,
+	chartRange: "month",   // "month" | "week"
   },
 });
 
@@ -1323,9 +1324,11 @@ st.classes = st.classes.map(c => ({
 
             // Settings-Defaults (für alte States)
       if(!st.settings || typeof st.settings !== "object") st.settings = {};
-      if(!Array.isArray(st.settings.compareSelected)) st.settings.compareSelected = [];
-      if(!st.settings.compareColors || typeof st.settings.compareColors !== "object") st.settings.compareColors = {};
-      if(typeof st.settings.compareShowSelf !== "boolean") st.settings.compareShowSelf = true;
+if(!Array.isArray(st.settings.compareSelected)) st.settings.compareSelected = [];
+if(!st.settings.compareColors || typeof st.settings.compareColors !== "object") st.settings.compareColors = {};
+if(typeof st.settings.compareShowSelf !== "boolean") st.settings.compareShowSelf = true;
+if(st.settings.chartRange !== "week" && st.settings.chartRange !== "month") st.settings.chartRange = "month";
+
 
       st.viewOnly = false;
       return st;
@@ -1674,6 +1677,11 @@ window.compareMeta = [];
       compareSelected = new Set(Array.isArray(s.compareSelected) ? s.compareSelected : []);
       compareColorPrefs = (s.compareColors && typeof s.compareColors === "object") ? s.compareColors : {};
       compareShowSelf = (typeof s.compareShowSelf === "boolean") ? s.compareShowSelf : true;
+	  chartRange = (s.chartRange === "week") ? "week" : "month";
+if(rangeToggleBtn){
+  rangeToggleBtn.textContent = (chartRange === "month") ? "Monat" : "Woche";
+}
+
 
       if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID) showAdmin();
       else showApp();
@@ -1724,15 +1732,37 @@ compareShowSelf = true;
 });
 
 function saveCompareSettingsToState(){
-  if(!state) return;
+  saveUiSettingsToState();
+}
+
+
+function saveUiSettingsToState(){
+  if(!state || !currentUser) return;
 
   if(!state.settings || typeof state.settings !== "object") state.settings = {};
+
   state.settings.compareSelected = Array.from(compareSelected);
   state.settings.compareColors = compareColorPrefs || {};
   state.settings.compareShowSelf = !!compareShowSelf;
+  state.settings.chartRange = (chartRange === "week") ? "week" : "month";
 
-  scheduleSaveState(); // schreibt profiles.state nach Supabase
+  flushSaveUiSettings();
 }
+
+async function flushSaveUiSettings(){
+  const payload = {
+    state: { ...state, viewOnly:false },
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await sb
+    .from("profiles")
+    .update(payload)
+    .eq("user_id", currentUser.id);
+
+  if(error) console.error("UI settings save error:", error);
+}
+
 
     /**********************
      * COMPARE MENU (UI)   *
@@ -2850,11 +2880,17 @@ function buildWeekSeriesFor(st, iso){
 
 function setChartRange(next){
   chartRange = (next === "week") ? "week" : "month";
+
   if(rangeToggleBtn){
     rangeToggleBtn.textContent = (chartRange === "month") ? "Monat" : "Woche";
   }
+
+  // 🔒 UI-Setting dauerhaft speichern (Supabase)
+  saveUiSettingsToState();
+
   repaintCharts();
 }
+
 
     function getSleepHabitFrom(st){
       return st.habits.find(h => h.id === "sleep") || null;
