@@ -1744,10 +1744,13 @@ function saveUiSettingsToState(){
   state.settings.compareSelected = Array.from(compareSelected);
   state.settings.compareColors = compareColorPrefs || {};
   state.settings.compareShowSelf = !!compareShowSelf;
+
+  // ✅ HIER: Chart-Range mit speichern
   state.settings.chartRange = (chartRange === "week") ? "week" : "month";
 
   flushSaveUiSettings();
 }
+
 
 async function flushSaveUiSettings(){
   const payload = {
@@ -2342,21 +2345,29 @@ await refreshCompareDatasets();
       if(error) throw error;
       if(!data) throw new Error("Profil nicht gefunden oder durch RLS blockiert.");
 
-      if(!viewOnly){
-        viewingUserId = currentUser.id;
-        viewingName = profileRow?.display_name || currentUser?.email || "—";
+if(!viewOnly){
+  viewingUserId = currentUser.id;
+  viewingName = profileRow?.display_name || currentUser?.email || "—";
 
-        inspected = null;
-        inspectedState = null;
+  inspected = null;
+  inspectedState = null;
 
-        state = migrateFromOlder(data.state);
-        state.viewOnly = false;
+  state = migrateFromOlder(data.state);
+  state.viewOnly = false;
 
-        updateBackButton();
-        bootAfterLogin();
-        userPill.textContent = `User: ${viewingName}`;
-        return;
-      }
+// ✅ HIER EINSETZEN: chartRange aus gespeichertem Setting laden
+const s = state?.settings || {};
+chartRange = (s.chartRange === "week") ? "week" : "month";
+if(rangeToggleBtn){
+  rangeToggleBtn.textContent = (chartRange === "month") ? "Monat" : "Woche";
+}
+
+  updateBackButton();
+  bootAfterLogin();                 // initCharts() nutzt jetzt korrektes chartRange
+  userPill.textContent = `User: ${viewingName}`;
+  return;
+}
+
 
       inspected = {
         user_id: data.user_id,
