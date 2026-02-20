@@ -608,6 +608,68 @@
 
     .hidden{ display:none !important; }
 
+    /* ACTIVITY LOG VIEW */
+    #activityRoot{
+      max-width:1200px;
+      margin:16px auto 28px auto;
+      padding:0 18px;
+    }
+    .activitySessionBlock{
+      padding:10px 14px;
+      background: rgba(15,23,48,.55);
+      border:1px solid rgba(35,48,90,.55);
+      border-radius:12px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .activitySessionDate{
+      font-weight:800;
+      font-size:13px;
+    }
+    .activityPingList{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:4px;
+    }
+    .activityPingChip{
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(35,48,90,.65);
+      background: rgba(18,26,51,.55);
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+    }
+    .activityPingChip.first{
+      border-color: rgba(122,162,255,.55);
+      background: rgba(122,162,255,.10);
+      color:var(--text);
+    }
+    .activityEmpty{
+      color:var(--muted);
+      font-size:13px;
+      padding:10px 0;
+    }
+    .activityUserHead{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+    }
+    .activityUserName{
+      font-weight:800;
+      font-size:16px;
+    }
+    .activityStats{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+    }
+
     /* Compare dropdown in chart header */
     .compareWrap{
       position:relative;
@@ -1204,6 +1266,26 @@
     </div>
   </div>
 
+  <!-- ACTIVITY LOG ROOT -->
+  <div id="activityRoot" class="hidden">
+    <div class="card">
+      <div class="cardHeader">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button id="activityBackBtn" class="btn ghost" type="button">← Admin</button>
+          <h2 id="activityTitle">Aktivitäts-Log</h2>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div class="pill info" id="activityAdminPill">Admin</div>
+          <button class="btn ghost" id="activityLogoutBtn" type="button">Logout</button>
+        </div>
+      </div>
+      <div class="cardBody">
+        <div id="activityStats" class="activityStats"></div>
+        <div id="activityLogList" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -1694,6 +1776,8 @@ window.compareMeta = [];
 
       scorePctMode = (s.scorePctMode === "exact") ? "exact" : "rounded";
 
+
+     initActivityTracking();
 
       if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID) showAdmin();
       else showApp();
@@ -4759,6 +4843,15 @@ if(circlePct){
         const right = document.createElement("div");
 right.className = "adminActions";
 
+const actBtn = document.createElement("button");
+actBtn.className = "btn ghost";
+actBtn.type = "button";
+actBtn.textContent = "Aktivität";
+actBtn.onclick = () => {
+  showActivityLog(rec.user_id, rec.display_name || rec.user_id);
+};
+right.appendChild(actBtn);
+
 const visitBtn = document.createElement("button");
 visitBtn.className = "btn";
 visitBtn.type = "button";
@@ -4808,6 +4901,171 @@ right.appendChild(note);
     }
 
     adminRefreshBtn.addEventListener("click", renderAdminPanel);
+
+    /**********************
+     * ACTIVITY TRACKING   *
+     **********************/
+    const PING_INTERVAL_MS = 5 * 60 * 1000; // 5 Minuten
+    let lastPingTime = 0;
+    let pingScheduled = false;
+
+    async function sendActivityPing(){
+      if(!currentUser) return;
+      const now = Date.now();
+      if(now - lastPingTime < PING_INTERVAL_MS) return;
+      lastPingTime = now;
+
+      try{
+        await sb.from("activity_logs").insert({ user_id: currentUser.id });
+      }catch(e){
+        console.warn("Activity ping failed:", e);
+      }
+    }
+
+    function scheduleActivityPing(){
+      if(pingScheduled) return;
+      pingScheduled = true;
+      setTimeout(async () => {
+        pingScheduled = false;
+        await sendActivityPing();
+      }, 800);
+    }
+
+   function initActivityTracking(){
+      // Sperre zurücksetzen damit Login-Ping immer durchkommt
+      lastPingTime = 0;
+      pingScheduled = false;
+
+      // Ersten Ping mit Verzögerung senden damit currentUser sicher gesetzt ist
+      setTimeout(() => sendActivityPing(), 2000);
+
+      // Nutzer-Interaktionen drosseln auf max. 1x / 5 Minuten
+      const events = ["click","keydown","scroll","touchstart"];
+      for(const ev of events){
+        window.addEventListener(ev, () => scheduleActivityPing(), { passive:true });
+      }
+
+      // Seitenbesuch/-fokus pingen
+      document.addEventListener("visibilitychange", () => {
+        if(document.visibilityState === "visible") scheduleActivityPing();
+      });
+    }
+
+    /**********************
+     * ACTIVITY LOG (ADMIN)*
+     **********************/
+    const activityRoot = document.getElementById("activityRoot");
+    const activityBackBtn = document.getElementById("activityBackBtn");
+    const activityLogoutBtn = document.getElementById("activityLogoutBtn");
+    const activityTitle = document.getElementById("activityTitle");
+    const activityLogList = document.getElementById("activityLogList");
+    const activityStatsEl = document.getElementById("activityStats");
+
+    activityLogoutBtn.addEventListener("click", logoutAll);
+    activityBackBtn.addEventListener("click", () => {
+      activityRoot.classList.add("hidden");
+      showAdmin();
+    });
+
+    function showActivityLog(userId, displayName){
+      authOverlay.classList.add("hidden");
+      appRoot.classList.add("hidden");
+      adminRoot.classList.add("hidden");
+      activityRoot.classList.remove("hidden");
+
+      activityTitle.textContent = `Aktivitäts-Log: ${displayName}`;
+      activityLogList.innerHTML = `<div class="note">Lade…</div>`;
+      activityStatsEl.innerHTML = "";
+
+      loadActivityLog(userId, displayName);
+    }
+
+    async function loadActivityLog(userId, displayName){
+      try{
+        const { data, error } = await sb
+          .from("activity_logs")
+          .select("id, created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if(error) throw error;
+
+        const logs = data || [];
+        activityLogList.innerHTML = "";
+
+        // Stats
+        activityStatsEl.innerHTML = "";
+        const totalPings = logs.length;
+        const uniqueDays = new Set(logs.map(l => l.created_at.slice(0,10))).size;
+
+        const s1 = document.createElement("div");
+        s1.className = "pill info";
+        s1.innerHTML = `<span>Pings gesamt:</span> <strong>${totalPings}</strong>`;
+
+        const s2 = document.createElement("div");
+        s2.className = "pill";
+        s2.innerHTML = `<span>Aktive Tage:</span> <strong>${uniqueDays}</strong>`;
+
+        if(logs.length > 0){
+          const last = new Date(logs[0].created_at);
+          const s3 = document.createElement("div");
+          s3.className = "pill";
+          s3.innerHTML = `<span>Zuletzt aktiv:</span> <strong>${last.toLocaleString("de-DE")}</strong>`;
+          activityStatsEl.appendChild(s3);
+        }
+
+        activityStatsEl.appendChild(s1);
+        activityStatsEl.appendChild(s2);
+
+        if(logs.length === 0){
+          const empty = document.createElement("div");
+          empty.className = "activityEmpty";
+          empty.textContent = "Noch keine Aktivität aufgezeichnet.";
+          activityLogList.appendChild(empty);
+          return;
+        }
+
+        // Gruppieren nach Tag
+        const byDay = new Map();
+        for(const l of logs){
+          const day = l.created_at.slice(0,10);
+          if(!byDay.has(day)) byDay.set(day, []);
+          byDay.get(day).push(l);
+        }
+
+        for(const [day, pings] of byDay){
+          const block = document.createElement("div");
+          block.className = "activitySessionBlock";
+
+          const dateEl = document.createElement("div");
+          dateEl.className = "activitySessionDate";
+          const d = parseISO(day);
+          dateEl.textContent = d.toLocaleDateString("de-DE", { weekday:"long", year:"numeric", month:"long", day:"numeric" })
+            + ` — ${pings.length} Ping${pings.length !== 1 ? "s" : ""}`;
+
+          const chipList = document.createElement("div");
+          chipList.className = "activityPingList";
+
+          // Pings zeitlich aufsteigend für diesen Tag
+          const sorted = [...pings].sort((a,b) => a.created_at > b.created_at ? -1 : 1);
+          sorted.forEach((p, i) => {
+            const chip = document.createElement("div");
+            chip.className = "activityPingChip" + (i === 0 ? " first" : "");
+            const t = new Date(p.created_at);
+            chip.textContent = t.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+            chipList.appendChild(chip);
+          });
+
+          block.appendChild(dateEl);
+          block.appendChild(chipList);
+          activityLogList.appendChild(block);
+        }
+
+      }catch(e){
+        activityLogList.innerHTML = `<div class="note" style="color:var(--bad);">Fehler: ${e?.message || "Unbekannt"}</div>`;
+      }
+    }
 
     /********
      * START *
