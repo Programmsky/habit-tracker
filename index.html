@@ -1806,8 +1806,9 @@ window.compareMeta = [];
       compareLabelCache.clear();
       compareColorCache.clear();
       compareSelected = new Set();
-compareColorPrefs = {};
-compareShowSelf = true;
+      compareColorPrefs = {};
+      compareShowSelf = true;
+      if(activityRoot) activityRoot.classList.add("hidden");
       destroyCharts();
       showAuth();
     }
