@@ -1682,6 +1682,7 @@ window.compareMeta = [];
       authOverlay.classList.remove("hidden");
       adminRoot.classList.add("hidden");
       appRoot.classList.add("hidden");
+      if(activityRoot) activityRoot.classList.add("hidden");
       userPill.style.display = "none";
       logoutBtn.style.display = "none";
       authEmail.value = "";
@@ -1808,7 +1809,6 @@ window.compareMeta = [];
       compareSelected = new Set();
       compareColorPrefs = {};
       compareShowSelf = true;
-      if(activityRoot) activityRoot.classList.add("hidden");
       destroyCharts();
       showAuth();
     }
