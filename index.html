@@ -1182,7 +1182,6 @@
 
     <div class="row" style="margin-top:10px;">
       <button class="btn" id="normalizeBtn" type="button">Automatisch auf 100 normieren</button>
-      <button class="btn" id="resetBtn" type="button" style="border-color: rgba(255,107,107,.55);">Alles zurücksetzen</button>
     </div>
 
     <div class="help">
@@ -1412,6 +1411,10 @@ st.classes = st.classes.map(c => ({
   habitIds: Array.isArray(c.habitIds) ? c.habitIds.filter(Boolean) : []
 }));
 
+      // Alte Daten nachrüsten: Für alle bereits vorhandenen Tage bis gestern
+      // wird die zu diesem Zeitpunkt aktuelle Habit-Konfiguration als Start-Snapshot abgelegt.
+      freezeSnapshotsUntilYesterday(st);
+
             // Settings-Defaults (für alte States)
       if(!st.settings || typeof st.settings !== "object") st.settings = {};
 if(!Array.isArray(st.settings.compareSelected)) st.settings.compareSelected = [];
@@ -1614,7 +1617,6 @@ window.compareMeta = [];
     const sumStatus = document.getElementById("sumStatus");
 
     const normalizeBtn = document.getElementById("normalizeBtn");
-    const resetBtn = document.getElementById("resetBtn");
 
     const logoutBtn = document.getElementById("logoutBtn");
     const userPill = document.getElementById("userPill");
@@ -1682,7 +1684,6 @@ window.compareMeta = [];
       authOverlay.classList.remove("hidden");
       adminRoot.classList.add("hidden");
       appRoot.classList.add("hidden");
-      if(activityRoot) activityRoot.classList.add("hidden");
       userPill.style.display = "none";
       logoutBtn.style.display = "none";
       authEmail.value = "";
@@ -1760,11 +1761,33 @@ window.compareMeta = [];
 
     async function postLogin(user){
       currentUser = user;
+
+      // Admin ist ein reiner Verwaltungsaccount: kein eigenes Tracker-Profil laden/anzeigen.
+      if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID){
+        profileRow = { user_id: user.id, display_name: user.email || "Admin", state: null };
+        state = null;
+        inspected = null;
+        inspectedState = null;
+        viewingUserId = null;
+        viewingName = null;
+
+        compareSelected = new Set();
+        compareColorPrefs = {};
+        compareShowSelf = false;
+        chartRange = "month";
+        if(rangeToggleBtn) rangeToggleBtn.textContent = "Monat";
+        scorePctMode = "rounded";
+
+        initActivityTracking();
+        showAdmin();
+        return;
+      }
+
       profileRow = await getOrCreateProfile(user);
 
-            await loadProfileForView(user.id, profileRow.display_name || user.email || "—", { viewOnly:false });
+      await loadProfileForView(user.id, profileRow.display_name || user.email || "—", { viewOnly:false });
 
-            // Compare-Settings aus dem eigenen State ziehen (pro Account)
+      // Compare-Settings aus dem eigenen State ziehen (pro Account)
       const s = state?.settings || {};
       compareSelected = new Set(Array.isArray(s.compareSelected) ? s.compareSelected : []);
       compareColorPrefs = (s.compareColors && typeof s.compareColors === "object") ? s.compareColors : {};
@@ -1777,11 +1800,8 @@ window.compareMeta = [];
 
       scorePctMode = (s.scorePctMode === "exact") ? "exact" : "rounded";
 
-
-     initActivityTracking();
-
-      if(ADMIN_USER_ID && currentUser.id === ADMIN_USER_ID) showAdmin();
-      else showApp();
+      initActivityTracking();
+      showApp();
 
       await refreshFriendsUI();
       buildCompareMenu();
@@ -1809,6 +1829,7 @@ window.compareMeta = [];
       compareSelected = new Set();
       compareColorPrefs = {};
       compareShowSelf = true;
+      if(activityRoot) activityRoot.classList.add("hidden");
       destroyCharts();
       showAuth();
     }
@@ -2265,6 +2286,21 @@ await refreshCompareDatasets();
       if(error) throw error;
     }
 
+    async function displayNameForUserId(userId){
+      if(!userId) return "—";
+      try{
+        const { data, error } = await sb
+          .from("profiles")
+          .select("display_name")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if(error) throw error;
+        return data?.display_name || (String(userId).slice(0,8) + "…");
+      }catch{
+        return String(userId).slice(0,8) + "…";
+      }
+    }
+
     async function refreshFriendsUI(){
       if(!currentUser) return;
 
@@ -2310,7 +2346,8 @@ await refreshCompareDatasets();
           t.textContent = isIncoming ? "Eingehende Anfrage" : "Ausgehende Anfrage";
           const m = document.createElement("div");
           m.className = "tiny";
-          m.textContent = `User: ${String(otherId).slice(0,8)}…`;
+          const otherDisplay = await displayNameForUserId(otherId);
+          m.textContent = isIncoming ? `Von: ${otherDisplay}` : `An: ${otherDisplay}`;
           left.appendChild(t);
           left.appendChild(m);
 
@@ -2499,6 +2536,109 @@ scorePctMode = (s.scorePctMode === "exact") ? "exact" : "rounded";
       return day;
     }
 
+    /**********************
+     * DAY CONFIG SNAPSHOTS
+     **********************/
+    function deepClone(obj){
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function isFrozenConfigDateISO(iso){
+      // Habit-Eigenschaften sind ab gestern und weiter zurück eingefroren.
+      // Tageswerte bleiben für heute + gestern bearbeitbar.
+      return iso <= yesterdayISO();
+    }
+
+    function makeConfigSnapshotFromCurrent(st){
+      return {
+        habits: deepClone(Array.isArray(st.habits) ? st.habits : []),
+        classes: deepClone(Array.isArray(st.classes) ? st.classes : []),
+        ungroupedRank: Number.isFinite(Number(st.ungroupedRank)) ? Math.floor(Number(st.ungroupedRank)) : null,
+        frozenAt: new Date().toISOString()
+      };
+    }
+
+    function ensureConfigSnapshotIn(st, iso){
+      const day = ensureDayIn(st, iso);
+      if(!day.configSnapshot || typeof day.configSnapshot !== "object"){
+        day.configSnapshot = makeConfigSnapshotFromCurrent(st);
+      }
+      if(!Array.isArray(day.configSnapshot.habits)) day.configSnapshot.habits = deepClone(st.habits || []);
+      if(!Array.isArray(day.configSnapshot.classes)) day.configSnapshot.classes = deepClone(st.classes || []);
+      if(!("ungroupedRank" in day.configSnapshot)){
+        day.configSnapshot.ungroupedRank = Number.isFinite(Number(st.ungroupedRank)) ? Math.floor(Number(st.ungroupedRank)) : null;
+      }
+      return day.configSnapshot;
+    }
+
+    function freezeSnapshotsUntilYesterday(st){
+      if(!st || !st.dayData) return false;
+      let changed = false;
+      const y = yesterdayISO();
+      const keys = new Set(Object.keys(st.dayData || {}));
+      keys.add(y); // gestern ist der Grenzfall: Status editierbar, Eigenschaften eingefroren
+
+      for(const iso of keys){
+        if(typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+        if(iso <= y){
+          const day = ensureDayIn(st, iso);
+          if(!day.configSnapshot){
+            day.configSnapshot = makeConfigSnapshotFromCurrent(st);
+            changed = true;
+          }
+        }
+      }
+      return changed;
+    }
+
+    function configForDateIn(st, iso){
+      if(!st) return { habits:[], classes:[], ungroupedRank:null };
+      if(isFrozenConfigDateISO(iso)){
+        const day = st.dayData?.[iso];
+        if(day?.configSnapshot) return day.configSnapshot;
+      }
+      return st;
+    }
+
+    function habitsForDateIn(st, iso){
+      const cfg = configForDateIn(st, iso);
+      return Array.isArray(cfg.habits) ? cfg.habits : [];
+    }
+
+    function classesForDateIn(st, iso){
+      const cfg = configForDateIn(st, iso);
+      return Array.isArray(cfg.classes) ? cfg.classes : [];
+    }
+
+    function ungroupedRankForDateIn(st, iso){
+      const cfg = configForDateIn(st, iso);
+      return Number.isFinite(Number(cfg.ungroupedRank)) ? Math.floor(Number(cfg.ungroupedRank)) : null;
+    }
+
+    function uiCanEditHabitConfig(){
+      if(isAdminSession() && adminEditingTargetId && viewingUserId === adminEditingTargetId) return true;
+      if(!!inspected || (viewingUserId !== currentUser?.id)) return false;
+      return (uiState()?.selectedDate || todayISO()) === todayISO();
+    }
+
+    function writableConfigForSelectedDate(){
+      const stW = writableState();
+      const iso = stW?.selectedDate || todayISO();
+      if(!stW) return null;
+      if(isFrozenConfigDateISO(iso)){
+        if(!isAdminSession()) return null;
+        return ensureConfigSnapshotIn(stW, iso);
+      }
+      return stW;
+    }
+
+    function beginHabitConfigEdit(){
+      const stW = writableState();
+      if(!stW) return;
+      const changed = freezeSnapshotsUntilYesterday(stW);
+      if(changed) scheduleSaveState();
+    }
+
     function getNumericEntryIn(st, iso, habitId){
       const day = ensureDayIn(st, iso);
       if(!day.values[habitId]) day.values[habitId] = { value: null, text: "" };
@@ -2553,10 +2693,14 @@ scorePctMode = (s.scorePctMode === "exact") ? "exact" : "rounded";
 }
 
 
-    function totalWeightIn(st){ return st.habits.reduce((sum,h)=> sum + Number(h.weight||0), 0); }
+    function totalWeightIn(st, iso=null){
+  const dateIso = iso || st?.selectedDate || todayISO();
+  return habitsForDateIn(st, dateIso).reduce((sum,h)=> sum + Number(h.weight||0), 0);
+}
 	
-	function classesSorted(st){
-  const arr = Array.isArray(st.classes) ? [...st.classes] : [];
+	function classesSorted(st, iso=null){
+  const dateIso = iso || st?.selectedDate || todayISO();
+  const arr = [...classesForDateIn(st, dateIso)];
   // rank 1 ganz oben, dann 2,3...
   arr.sort((a,b) => Number(a.rank||1) - Number(b.rank||1));
   return arr;
@@ -2565,26 +2709,32 @@ scorePctMode = (s.scorePctMode === "exact") ? "exact" : "rounded";
 const UNGROUPED_CLASS_ID = "__ungrouped__";
 
 function getUngroupedRankSelf(){
-  return Number.isFinite(Number(state?.ungroupedRank)) ? Math.floor(Number(state.ungroupedRank)) : null;
+  const st = uiState() || state;
+  const iso = st?.selectedDate || todayISO();
+  return ungroupedRankForDateIn(st, iso);
 }
 
 function setUngroupedRankSelf(nOrNull){
   if(uiIsViewOnly()) return;
+  beginHabitConfigEdit();
+  const cfg = writableConfigForSelectedDate() || state;
   if(nOrNull == null){
-    delete state.ungroupedRank;
+    delete cfg.ungroupedRank;
   }else{
-    state.ungroupedRank = Math.floor(Number(nOrNull));
+    cfg.ungroupedRank = Math.floor(Number(nOrNull));
   }
   scheduleSaveState();
 }
 
-function hasAnyRealClasses(st){
-  return Array.isArray(st.classes) && st.classes.length > 0;
+function hasAnyRealClasses(st, iso=null){
+  const dateIso = iso || st?.selectedDate || todayISO();
+  return classesForDateIn(st, dateIso).length > 0;
 }
 
-function classHabitIdSet(st){
+function classHabitIdSet(st, iso=null){
+  const dateIso = iso || st?.selectedDate || todayISO();
   const set = new Set();
-  for(const c of (st.classes || [])){
+  for(const c of classesForDateIn(st, dateIso)){
     for(const hid of (c.habitIds || [])) set.add(hid);
   }
   // Ungruppiert ist KEINE "Klasse mit habitIds" -> alles was nicht in set ist, bleibt ungruppiert
@@ -2598,7 +2748,8 @@ function isNaturalInt(n){
 function isClassRankTakenSelf(rank, excludeClassId=null){
   const r = Number(rank);
   if(!isNaturalInt(r)) return false;
-  for(const c of (state.classes || [])){
+  const cfg = writableConfigForSelectedDate() || state;
+  for(const c of (cfg.classes || [])){
     if(excludeClassId && c.id === excludeClassId) continue;
     if(Number(c.rank) === r) return true;
   }
@@ -2608,24 +2759,22 @@ function isClassRankTakenSelf(rank, excludeClassId=null){
 function toggleClassCollapsedSelf(classId){
   if(uiIsViewOnly()) return;
 
-  // Toggle immer im "aktuell bearbeitbaren" State:
-  // - Admin-Edit: inspectedState
-  // - sonst: state
-  const stW = writableState();
-  if(!stW || !Array.isArray(stW.classes)) return;
+  const cfg = writableConfigForSelectedDate();
+  if(!cfg || !Array.isArray(cfg.classes)) return;
 
-  const c = stW.classes.find(x => x.id === classId);
+  const c = cfg.classes.find(x => x.id === classId);
   if(!c) return;
 
   c.collapsed = !c.collapsed;
-
-  // Speichern nur für Self; Admin muss collapsed nicht persistieren
-  if(stW === state) scheduleSaveState();
+  scheduleSaveState();
 }
 
 function toggleClassCollapsedViewOnly(st, classId){
-  if(!st || !Array.isArray(st.classes)) return;
-  const c = st.classes.find(x => x.id === classId);
+  if(!st) return;
+  const iso = st.selectedDate || todayISO();
+  const cfg = configForDateIn(st, iso);
+  if(!cfg || !Array.isArray(cfg.classes)) return;
+  const c = cfg.classes.find(x => x.id === classId);
   if(!c) return;
   c.collapsed = !c.collapsed;
 }
@@ -2660,7 +2809,7 @@ function habitMarkStateForDay(st, habit, iso){
 
 function classAggregateMarkStateForDay(st, cls, iso){
   const ids = Array.isArray(cls.habitIds) ? cls.habitIds : [];
-  const habits = st.habits.filter(h => ids.includes(h.id));
+  const habits = habitsForDateIn(st, iso).filter(h => ids.includes(h.id));
 
   // leere Klasse: keine Habits -> "empty"
   if(!habits.length) return "empty";
@@ -2728,8 +2877,10 @@ function classAggregateMarkStateForDay(st, cls, iso){
 
 function removeHabitFromAllClassesSelf(habitId){
   if(uiIsViewOnly()) return;
-  if(!Array.isArray(state.classes)) state.classes = [];
-  for(const c of state.classes){
+  const cfg = writableConfigForSelectedDate();
+  if(!cfg) return;
+  if(!Array.isArray(cfg.classes)) cfg.classes = [];
+  for(const c of cfg.classes){
     if(!Array.isArray(c.habitIds)) c.habitIds = [];
     c.habitIds = c.habitIds.filter(id => id !== habitId);
   }
@@ -2737,7 +2888,10 @@ function removeHabitFromAllClassesSelf(habitId){
 
 function addHabitToClassSelf(habitId, classId){
   if(uiIsViewOnly()) return;
-  const c = (state.classes || []).find(x => x.id === classId);
+  const cfg = writableConfigForSelectedDate();
+  if(!cfg) return;
+  if(!Array.isArray(cfg.classes)) cfg.classes = [];
+  const c = cfg.classes.find(x => x.id === classId);
   if(!c) return;
   if(!Array.isArray(c.habitIds)) c.habitIds = [];
   if(!c.habitIds.includes(habitId)) c.habitIds.push(habitId);
@@ -2745,6 +2899,7 @@ function addHabitToClassSelf(habitId, classId){
 
 function moveHabitToClassSelf(habitId, classIdOrNull){
   if(uiIsViewOnly()) return;
+  beginHabitConfigEdit();
   removeHabitFromAllClassesSelf(habitId);
   if(classIdOrNull) addHabitToClassSelf(habitId, classIdOrNull);
   scheduleSaveState();
@@ -2753,7 +2908,7 @@ function moveHabitToClassSelf(habitId, classIdOrNull){
 
     function earnedWeightIn(st, iso){
       let w=0;
-      for(const h of st.habits){
+      for(const h of habitsForDateIn(st, iso)){
         if(h.type === "numeric") w += numericCreditIn(st, h, iso);
         else if(getCheckStateIn(st, iso, h.id) === 1) w += Number(h.weight||0);
       }
@@ -2761,7 +2916,7 @@ function moveHabitToClassSelf(habitId, classIdOrNull){
     }
 
     function dayScoreIn(st, iso){
-      const tw = totalWeightIn(st);
+      const tw = totalWeightIn(st, iso);
       if(tw <= 0) return 0;
       return round2((earnedWeightIn(st, iso)/tw)*100);
     }
@@ -2811,7 +2966,7 @@ function lostWeightTodayIn(st, habit, iso){
 
 function maxPossibleTodayPct(st, iso){
   let lost = 0;
-  for(const h of st.habits){
+  for(const h of habitsForDateIn(st, iso)){
     lost += lostWeightTodayIn(st, h, iso);
   }
   return clamp(round2(100 - lost), 0, 100);
@@ -2974,7 +3129,7 @@ function buildWeekSeriesFor(st, iso){
   const scores = [];
   const sleeps = [];
 
-  const sleepHabit = getSleepHabitFrom(st);
+  const sleepHabit = getSleepHabitFrom(st, iso);
   const goal = sleepHabit && Number.isFinite(Number(sleepHabit.goal)) ? Number(sleepHabit.goal) : 0;
 
   const dayNames = ["Mo","Di","Mi","Do","Fr","Sa","So"];
@@ -3010,8 +3165,9 @@ function setChartRange(next){
 }
 
 
-    function getSleepHabitFrom(st){
-      return st.habits.find(h => h.id === "sleep") || null;
+    function getSleepHabitFrom(st, iso=null){
+      const dateIso = iso || st?.selectedDate || todayISO();
+      return habitsForDateIn(st, dateIso).find(h => h.id === "sleep") || null;
     }
 
     function buildMonthSeriesFor(st, iso){
@@ -3024,7 +3180,7 @@ function setChartRange(next){
       const scores = [];
       const sleeps = [];
 
-      const sleepHabit = getSleepHabitFrom(st);
+      const sleepHabit = getSleepHabitFrom(st, iso);
       const goal = sleepHabit && Number.isFinite(Number(sleepHabit.goal)) ? Number(sleepHabit.goal) : 0;
 
       for(let day=1; day<=nDays; day++){
@@ -3211,13 +3367,19 @@ function setChartRange(next){
     // IMPORTANT CHANGE:
     // Score chart datasets are always: self + (if inspected) inspected + compareSelected (excluding duplicates).
     async function refreshCompareDatasets(){
-      if(!scoreChart || !state || !currentUser) return;
+      if(!scoreChart || !currentUser) return;
+      if(!state && !inspectedState){
+        scoreChart.data.labels = [];
+        scoreChart.data.datasets = [];
+        scoreChart.update();
+        return;
+      }
 
       compareStateCache.clear();
       compareLabelCache.clear();
       compareColorCache.clear();
 
-      const monthISO = uiState()?.selectedDate || state.selectedDate;
+      const monthISO = uiState()?.selectedDate || state?.selectedDate || todayISO();
 
       // labels follow currently viewed month
       const baseSeriesForLabels = (chartRange === "month")
@@ -3229,7 +3391,7 @@ function setChartRange(next){
       window.compareMeta = [];
 
             // 0) SELF optional (an/aus per Compare-Menü)
-      if(compareShowSelf){
+      if(compareShowSelf && state){
         const selfLabel = (profileRow?.display_name || currentUser?.email || "Ich");
         const selfDefault = "rgba(122,162,255,.95)"; // Standardblau (auch sonst im UI genutzt)
         const selfPref = getPreferredCompareColor(currentUser.id);
@@ -3735,6 +3897,11 @@ const lastDayIdx = (() => {
 
     function updateBackButton(){
       if(!backToMeBtn) return;
+      // Admin hat keine eigene Tracker-Seite; zurück geht über den Admin-Startseite-Button.
+      if(isAdminSession() && adminEditingTargetId){
+        backToMeBtn.classList.add("hidden");
+        return;
+      }
       backToMeBtn.classList.toggle("hidden", !inspected);
     }
 
@@ -3814,9 +3981,10 @@ if(circleMaxPossible){
 
 
       let c=0;
-      for(const h of st.habits) if(getHabitDoneForDayIn(st, h, iso)) c++;
+      const dayHabits = habitsForDateIn(st, iso);
+      for(const h of dayHabits) if(getHabitDoneForDayIn(st, h, iso)) c++;
       doneCountEl.textContent = String(c);
-      habitCountEl.textContent = String(st.habits.length);
+      habitCountEl.textContent = String(dayHabits.length);
 
       const tw = totalWeightIn(st);
 
@@ -3829,7 +3997,7 @@ if(circleMaxPossible){
         weightStatusPill.style.display = "none";
       }
 
-      const sleepHabit = getSleepHabitFrom(st);
+      const sleepHabit = getSleepHabitFrom(st, iso);
       const sleepEntry = getNumericEntryIn(st, iso, "sleep");
       const sleepV = sleepEntry.value;
       const sleepGoal = sleepHabit && Number.isFinite(Number(sleepHabit.goal)) ? Number(sleepHabit.goal) : 0;
@@ -3842,14 +4010,15 @@ if(circleMaxPossible){
   const st = uiState();
   const iso = st.selectedDate;
   const viewOnly = uiIsViewOnly();
+  const configLocked = !uiCanEditHabitConfig();
 
-  const sortedHabits = [...st.habits].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
+  const sortedHabits = [...habitsForDateIn(st, iso)].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
 
-  const classes = classesSorted(st);
-  const assignedSet = classHabitIdSet(st);
+  const classes = classesSorted(st, iso);
+  const assignedSet = classHabitIdSet(st, iso);
   const ungroupedHabits = sortedHabits.filter(h => !assignedSet.has(h.id));
   // Wenn es KEINE echten Klassen gibt: wie frueher einfach nur Habits listen
-if(!hasAnyRealClasses(st)){
+if(!hasAnyRealClasses(st, iso)){
   for(const h of sortedHabits){
     habitListEl.appendChild(renderOneHabit(h));
   }
@@ -3861,8 +4030,8 @@ if(!hasAnyRealClasses(st)){
     const row = document.createElement("div");
     row.className = "habitRow";
 	// Drag starten (nur wenn Bearbeiten)
-row.draggable = !viewOnly;
-if(!viewOnly){
+row.draggable = !configLocked;
+if(!configLocked){
   row.addEventListener("dragstart", (e) => {
     row.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
@@ -3947,15 +4116,17 @@ if(!viewOnly){
         const isSleep = (h.id === "sleep");
         setNumericValueForDay(iso, h.id, input.value, isSleep ? { min:0, max:24 } : {});
 
-        const selfHabit = state.habits.find(x => x.id === h.id) || h;
-        const entryNow = getNumericEntryIn(state, iso, selfHabit.id);
+        const stW = writableState();
+        const cfgNow = configForDateIn(stW, iso);
+        const selfHabit = (cfgNow.habits || []).find(x => x.id === h.id) || h;
+        const entryNow = getNumericEntryIn(stW, iso, selfHabit.id);
         const hasVal = (entryNow.value != null && !Number.isNaN(entryNow.value)) || (typeof entryNow.text === "string" && entryNow.text.trim().length > 0);
 
         if(!hasVal){
           markBoxApplyState(box, "empty");
         } else {
           const w = Number(selfHabit.weight||0);
-          const credit = (w > 0) ? numericCreditIn(state, selfHabit, iso) : 0;
+          const credit = (w > 0) ? numericCreditIn(stW, selfHabit, iso) : 0;
           const pct = (w > 0) ? Math.round((credit / w) * 100) : 0;
           markBoxApplyState(box, markStateFromPct(pct));
         }
@@ -3971,7 +4142,8 @@ if(!viewOnly){
         if(viewOnly) return;
 
         const n = parseDecimalDE(input.value);
-        const entry2 = getNumericEntrySelf(iso, h.id);
+        const stW = writableState();
+        const entry2 = getNumericEntryIn(stW, iso, h.id);
 
         if(Number.isFinite(n)){
           let v = n;
@@ -4035,7 +4207,7 @@ const now = getCheckStateIn(stW, iso, selfHabit.id);
   }
 
     // Drop "ins Leere" => Habit wird ungruppiert (nur wenn Bearbeiten)
-  if(!viewOnly){
+  if(!configLocked){
     habitListEl.ondragover = (e) => {
       // nur aktiv, wenn NICHT ueber einer Klasse
       const overClass = !!e.target.closest(".classBlock");
@@ -4082,7 +4254,7 @@ const now = getCheckStateIn(stW, iso, selfHabit.id);
     block.className = "classBlock" + (c.collapsed ? " classCollapsed" : "");
 
     // Drop auf Klasse (nur wenn Bearbeiten)
-    if(!viewOnly){
+    if(!configLocked){
       block.addEventListener("dragover", (e) => {
         e.preventDefault();
         block.classList.add("dropHover");
@@ -4140,7 +4312,7 @@ markBoxApplyState(clsBox, clsState);
     head.appendChild(rightWrap);
 
     head.addEventListener("click", () => {
-      if(viewOnly){
+      if(configLocked){
         toggleClassCollapsedViewOnly(uiState(), c.id);
         renderHabitList();
         return;
@@ -4177,10 +4349,12 @@ markBoxApplyState(clsBox, clsState);
     function renderEditor(){
       // Editor shows viewed profile (self or friend), but disabled in friend view
       const st = uiState();
-      const viewOnly = uiIsViewOnly();
+      const iso = st.selectedDate;
+      const viewOnly = !uiCanEditHabitConfig();
+      const cfg = writableConfigForSelectedDate() || configForDateIn(st, iso);
 
       weightsList.innerHTML = "";
-      const sortedHabits = [...st.habits].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
+      const sortedHabits = [...habitsForDateIn(st, iso)].sort((a,b) => Number(b.weight||0) - Number(a.weight||0));
 
       for(const h of sortedHabits){
         const rowWrap = document.createElement("div");
@@ -4206,6 +4380,7 @@ markBoxApplyState(clsBox, clsState);
 
         wInput.addEventListener("input", () => {
           if(viewOnly) return;
+          beginHabitConfigEdit();
           const n = Number(wInput.value);
           h.weight = Number.isFinite(n) ? clamp(n, 0, 1000000) : 0;
           scheduleSaveState();
@@ -4231,6 +4406,7 @@ markBoxApplyState(clsBox, clsState);
 
           opBtn.addEventListener("click", () => {
             if(viewOnly) return;
+            beginHabitConfigEdit();
             h.dir = (h.dir === "MAX") ? "MIN" : "MAX";
             scheduleSaveState();
             renderEditor();
@@ -4251,6 +4427,7 @@ markBoxApplyState(clsBox, clsState);
 
           goalInput.addEventListener("input", () => {
             if(viewOnly) return;
+            beginHabitConfigEdit();
             const n = parseDecimalDE(goalInput.value);
             if(Number.isFinite(n)){
               h.goal = n;
@@ -4263,6 +4440,7 @@ markBoxApplyState(clsBox, clsState);
 
           goalInput.addEventListener("blur", () => {
             if(viewOnly) return;
+            beginHabitConfigEdit();
             const n = parseDecimalDE(goalInput.value);
             if(Number.isFinite(n)) goalInput.value = formatDecimalDE(n, 2);
             scheduleSaveState();
@@ -4287,6 +4465,7 @@ markBoxApplyState(clsBox, clsState);
 
           halfInput.addEventListener("input", () => {
             if(viewOnly) return;
+            beginHabitConfigEdit();
             const n = parseDecimalDE(halfInput.value);
             if(Number.isFinite(n)){
               h.halfLife = Math.max(0, n);
@@ -4299,6 +4478,7 @@ markBoxApplyState(clsBox, clsState);
 
           halfInput.addEventListener("blur", () => {
             if(viewOnly) return;
+            beginHabitConfigEdit();
             const n = parseDecimalDE(halfInput.value);
             if(Number.isFinite(n)) halfInput.value = formatDecimalDE(Math.max(0, n), 2);
             scheduleSaveState();
@@ -4331,12 +4511,14 @@ markBoxApplyState(clsBox, clsState);
 
           xBtn.addEventListener("click", () => {
             if(viewOnly) return;
+            beginHabitConfigEdit();
 
-            state.habits = state.habits.filter(x => x.id !== h.id);
-            for(const dayIso of Object.keys(state.dayData)){
-              const day = state.dayData[dayIso];
-              if(day?.checks && (h.id in day.checks)) delete day.checks[h.id];
-              if(day?.values && (h.id in day.values)) delete day.values[h.id];
+            cfg.habits = cfg.habits.filter(x => x.id !== h.id);
+
+            // Wichtig: Tagesdaten nie rückwirkend löschen.
+            // Alte Snapshots können denselben Habit noch brauchen, damit historische Tage korrekt bleiben.
+            for(const c of (cfg.classes || [])){
+              c.habitIds = (c.habitIds || []).filter(id => id !== h.id);
             }
             scheduleSaveState();
             renderEditor();
@@ -4397,7 +4579,7 @@ function renderClassesManager(){
   if(!classesManageWrap) return;
 
   const st = uiState();
-  const viewOnly = uiIsViewOnly();
+  const viewOnly = !uiCanEditHabitConfig();
 
   classesManageWrap.innerHTML = "";
 
@@ -4518,7 +4700,9 @@ name.style.opacity = viewOnly ? ".55" : "1";
 
     name.addEventListener("input", () => {
       if(viewOnly) return;
-      const selfC = (state.classes || []).find(x => x.id === c.id);
+      beginHabitConfigEdit();
+      const cfg = writableConfigForSelectedDate() || state;
+      const selfC = (cfg.classes || []).find(x => x.id === c.id);
       if(!selfC) return;
       selfC.name = name.value;
       scheduleSaveState();
@@ -4553,7 +4737,9 @@ function commitClassRank(){
     return;
   }
 
-  const selfC = (state.classes || []).find(x => x.id === c.id);
+  beginHabitConfigEdit();
+  const cfg = writableConfigForSelectedDate() || state;
+  const selfC = (cfg.classes || []).find(x => x.id === c.id);
   if(!selfC) return;
 
   selfC.rank = r;
@@ -4579,7 +4765,9 @@ rank.addEventListener("blur", commitClassRank);
   if(viewOnly) return;
 
   // Remove class (Habits bleiben ungruppiert)
-  state.classes = (state.classes || []).filter(x => x.id !== c.id);
+  beginHabitConfigEdit();
+  const cfg = writableConfigForSelectedDate() || state;
+  cfg.classes = (cfg.classes || []).filter(x => x.id !== c.id);
 
   scheduleSaveState();
   renderClassesManager();
@@ -4596,7 +4784,10 @@ rank.addEventListener("blur", commitClassRank);
 }
 
     function addHabit(){
-      if(uiIsViewOnly()) return;
+      if(!uiCanEditHabitConfig()) return;
+      const cfg = writableConfigForSelectedDate();
+      if(!cfg) return;
+      beginHabitConfigEdit();
 
       const name = (newHabitName.value || "").trim();
       const w = Number(newHabitWeight.value || 0);
@@ -4620,7 +4811,7 @@ if(halfRaw && (!Number.isFinite(half) || half <= 0)){
   return;
 }
 
-state.habits.push({
+cfg.habits.push({
   id: cryptoId(),
   name,
   weight: w,
@@ -4631,7 +4822,7 @@ state.habits.push({
 });
 
       } else {
-        state.habits.push({ id: cryptoId(), name, weight: w, type: "check" });
+        cfg.habits.push({ id: cryptoId(), name, weight: w, type: "check" });
       }
 
       newHabitName.value = "";
@@ -4657,7 +4848,10 @@ state.habits.push({
 
 
 function addClass(){
-  if(uiIsViewOnly()) return;
+  if(!uiCanEditHabitConfig()) return;
+  const cfg = writableConfigForSelectedDate();
+  if(!cfg) return;
+  beginHabitConfigEdit();
 
   const name = (newClassName.value || "").trim();
   const rank = Number(newClassRank.value);
@@ -4675,7 +4869,7 @@ function addClass(){
     return;
   }
 
-  state.classes.push({
+  cfg.classes.push({
     id: cryptoId(),
     name,
     rank: Math.floor(rank),
@@ -4696,26 +4890,30 @@ addClassBtn.addEventListener("click", addClass);
 enhanceInput(newClassName, { onEnter: addClass });
 enhanceInput(newClassRank, { onEnter: addClass });
     normalizeBtn.addEventListener("click", () => {
-      if(uiIsViewOnly()) return;
+      if(!uiCanEditHabitConfig()) return;
+      const cfg = writableConfigForSelectedDate();
+      if(!cfg) return;
 
-      const sum = totalWeightIn(state);
+      const iso = (uiState()?.selectedDate || todayISO());
+      const habits = cfg.habits || [];
+      const sum = habits.reduce((s,h)=>s+Number(h.weight||0),0);
       if(sum <= 0){
-        const per = 100 / state.habits.length;
-        for(const h of state.habits) h.weight = per;
+        const per = 100 / habits.length;
+        for(const h of habits) h.weight = per;
       } else {
-        for(const h of state.habits){
+        for(const h of habits){
           h.weight = (Number(h.weight||0) / sum) * 100;
         }
       }
-      for(const h of state.habits) h.weight = round2(h.weight);
+      for(const h of habits) h.weight = round2(h.weight);
 
-      let drift = round2(100 - totalWeightIn(state));
-      if(Math.abs(drift) >= 0.01){
+      let drift = round2(100 - habits.reduce((s,h)=>s+Number(h.weight||0),0));
+      if(Math.abs(drift) >= 0.01 && habits.length){
         let maxIdx = 0;
-        for(let i=1;i<state.habits.length;i++){
-          if(state.habits[i].weight > state.habits[maxIdx].weight) maxIdx = i;
+        for(let i=1;i<habits.length;i++){
+          if(habits[i].weight > habits[maxIdx].weight) maxIdx = i;
         }
-        state.habits[maxIdx].weight = round2(state.habits[maxIdx].weight + drift);
+        habits[maxIdx].weight = round2(habits[maxIdx].weight + drift);
       }
 
       scheduleSaveState();
@@ -4723,19 +4921,6 @@ enhanceInput(newClassRank, { onEnter: addClass });
       renderHabitList();
       renderTop();
       repaintCharts();
-      buildWeeklyPanel();
-    });
-
-    resetBtn.addEventListener("click", () => {
-      if(uiIsViewOnly()) return;
-      if(!confirm("Wirklich alles zurücksetzen?")) return;
-      state = defaultState();
-      scheduleSaveState();
-      datePicker.value = state.selectedDate;
-      repaintCharts();
-      renderEditor();
-      renderHabitList();
-      renderTop();
       buildWeeklyPanel();
     });
 
@@ -4798,7 +4983,7 @@ if(circlePct){
         return;
       }
 
-      const entries = data || [];
+      const entries = (data || []).filter(rec => rec.user_id !== ADMIN_USER_ID);
       adminUserCount.textContent = String(entries.length);
 
       if(entries.length === 0){
